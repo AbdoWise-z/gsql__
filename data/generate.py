@@ -27,7 +27,7 @@ books = []
 for i in range(1, num_books + 1):
     books.append({
         "Book_id (P)": i + 100,
-        "Title": fake.sentence(nb_words=14).rstrip('.'),
+        "Title": fake.sentence(nb_words=6).rstrip('.'),
         "Author_id": random.randint(1, num_authors),
         "Genre": random.choice(["Fiction", "Dystopian", "Magical Realism", "Fantasy", "Sci-Fi", "Non-fiction", "Mystery"]),
         "Published_Year": random.randint(1900, 2023)

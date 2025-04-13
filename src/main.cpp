@@ -1,11 +1,21 @@
 #include <iostream>
 #include "hsql/SQLParser.h"
+#include "csv.hpp"
 
 int main() {
-    auto sql = "SELECT * FROM some_table WHERE id in (SELECT id FROM some_table2);";
-    hsql::SQLParserResult result;
-    hsql::SQLParser::parse(sql, &result);
-    std::cout << result.isValid() << std::endl;
-    std::cout << result.getStatements()[0]->type() << std::endl;
+    csv::CSVReader reader("data/Authors.csv");
+    std::vector<std::string> headers = reader.get_col_names();
+    std::cout << "Headers:\n";
+    for (const auto& h : headers)
+        std::cout << " - " << h << "\n";
+
+    // Iterate through rows
+    for (csv::CSVRow& row : reader) {
+        for (csv::CSVField& field : row) {
+            std::cout << field.get<>() << " | ";
+        }
+        std::cout << "\n";
+    }
+
     return 0;
 }
