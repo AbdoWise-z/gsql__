@@ -92,7 +92,7 @@ int main() {
     std::cout << "use load / add [path] to load a csv file as table," << std::endl;
     std::cout << "use remove [name] to remove a table" << std::endl;
     std::cout << "use table [name] / [names] to show table details" << std::endl;
-    std::cout << "or enter an SQL query" << std::endl;
+    std::cout << "or enter a SQL query" << std::endl;
 
     CLI cli(sql);
     cli.addCommand("load", loadTable);
