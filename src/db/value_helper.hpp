@@ -16,8 +16,8 @@
 
 union tval {
     std::string* s;
-    int64_t     i;
-    double      d;
+    int64_t      i;
+    double       d;
 };
 
 int cmp(const tval& a, const tval& b, const DataType& t);

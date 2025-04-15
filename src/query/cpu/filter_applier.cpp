@@ -340,9 +340,9 @@ tensor<char, CPU>* FilterApplier::apply(
                 std::cout << "kExprOperator::Equals no hashes, building ..." << std::endl;
 #endif
                 if (column_ptr_r->data.size() > column_ptr_l->data.size()) {
-                    column_ptr_r->buildHashedIndexes(4); // fixme: add global option for this
+                    column_ptr_r->buildHashedIndexes(Cfg::HashTableExtendableSize);
                 } else {
-                    column_ptr_l->buildHashedIndexes(4);
+                    column_ptr_l->buildHashedIndexes(Cfg::HashTableExtendableSize);
                 }
 #ifdef FILTER_DEBUG
                 std::cout << "kExprOperator::Equals no hashes, done ..." << std::endl;
@@ -408,7 +408,6 @@ tensor<char, CPU>* FilterApplier::apply(
         }
 
         auto* result = new tensor<char, CPU>(literal_sizes);
-        //fixme: if code blows due to an error of string literals it's probably this line here
         result->setAll(strlen(eval->name) > 0 ? 1 : 0);
         return result;
     } else if (expr_type == hsql::ExprType::kExprLiteralInt) {

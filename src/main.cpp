@@ -173,9 +173,28 @@ void hash_table(std::vector<std::string> params) {
             std::cout << color("Already indexed.", GREEN_FG) << std::endl;
             continue;
         }
-        c.buildHashedIndexes(8);
+        c.buildHashedIndexes(Cfg::HashTableExtendableSize);
         std::cout << color("Done.", GREEN_FG) << std::endl;
     }
+}
+
+void cfg(std::vector<std::string> params) {
+    if (params.size() < 2) {
+        std::cout << "Usage: cfg [option] [value]" << std::endl;
+        return;
+    }
+
+    if (params[0] == "heXv") {
+        try {
+            Cfg::HashTableExtendableSize = std::stoi(params[1]);
+            std::cout << "Updated: " << color("Cfg::HashTableExtendableSize", CYAN_FG) << " = " << Cfg::HashTableExtendableSize << std::endl;
+            return;
+        } catch (std::exception& e) {
+            std::cout << "Error modifying configuration: " << e.what() << std::endl;
+        }
+    }
+
+    std::cout << "Unknown param." << std::endl;
 }
 
 void sql(std::vector<std::string> params) {
@@ -243,6 +262,7 @@ int main() {
     cli.addCommand("dummy", dummy);
     cli.addCommand("show", show_table);
     cli.addCommand("hash", hash_table);
+    cli.addCommand("cfg", cfg);
 
     cli.run();
     return 0;

@@ -6,3 +6,7 @@
 
 
 std::unordered_map<std::string, table*> tables;
+
+namespace Cfg {
+    size_t HashTableExtendableSize = 4;
+}

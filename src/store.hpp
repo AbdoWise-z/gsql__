@@ -11,6 +11,10 @@
 
 extern std::unordered_map<std::string, table*> tables;
 
+namespace Cfg {
+    extern size_t HashTableExtendableSize;
+}
+
 
 
 #endif //STORE_HPP
