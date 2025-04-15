@@ -39,15 +39,15 @@ public:
         return GPU;
     }
 
-    T operator[](const std::vector <int> &indices) {
+    T operator[](const std::vector <size_t> &indices) {
         if (indices.size() != shape.size()) {
             std::cout << indices.size() << " " << shape.size() << std::endl;
             throw std::invalid_argument("Tensor::operator[]: indices size mismatch (!= shape)");
         }
 
-        int index = 0;
-        int acc = 1;
-        for (int i = 0;i < shape.size();i++) {
+        size_t index = 0;
+        size_t acc = 1;
+        for (size_t i = 0;i < shape.size();i++) {
             index += indices[i] * acc;
             acc *= shape[i];
         }
@@ -60,7 +60,7 @@ public:
 
     template<typename... Args>
     T operator()(Args&&... args) {
-        const std::vector <int> indices = {std::forward<Args>(args)...};
+        const std::vector <size_t> indices = {std::forward<Args>(args)...};
         return this->operator[](indices);
     }
 
@@ -78,6 +78,8 @@ public:
         cu::free(data);
         data = nullptr;
     }
+
+
 };
 
 

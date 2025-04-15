@@ -11,7 +11,7 @@ A small python script that generates a large amount of fake data CVSs for the db
 fake = Faker()
 
 # Generate Authors
-num_authors = 8000
+num_authors = 80
 authors = []
 for i in range(1, num_authors + 1):
     authors.append({
@@ -22,7 +22,7 @@ for i in range(1, num_authors + 1):
 authors_df = pd.DataFrame(authors)
 
 # Generate Books
-num_books = 100000
+num_books = 1000
 books = []
 for i in range(1, num_books + 1):
     books.append({

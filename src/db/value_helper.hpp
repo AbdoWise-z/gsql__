@@ -24,8 +24,32 @@ int cmp(const tval& a, const tval& b, const DataType& t);
 
 size_t sizeOf(const tval& v, const DataType& t);
 
+tval copy(const tval& v, const DataType& t);
+
 inline uint64_t hash(const tval& v, const DataType& t) {
-    return MurmurHash3_x64_64(&v, sizeOf(v, t), 0);
+    return MurmurHash3_x64_64(t == STRING ? static_cast<const void*>(v.s) : static_cast<const void*>(&v), sizeOf(v, t), SEED);
 }
+
+inline tval create_from(const std::string& str) {
+    tval res;
+    res.s = new std::string(str);
+    return res;
+}
+
+inline tval create_from(int64_t i) {
+    tval res;
+    res.i = i;
+    return res;
+}
+
+
+inline tval create_from(double d) {
+    tval res;
+    res.d = d;
+    return res;
+}
+
+void deleteValue(tval, DataType);
+
 
 #endif //VALUE_HELPER_HPP

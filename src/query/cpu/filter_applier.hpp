@@ -14,9 +14,10 @@
 
 namespace FilterApplier {
      tensor<char, CPU>* apply(
-        std::unordered_map<std::string, table*>& tables,
-        hsql::Expr* eval,
-        hsql::LimitDescription* limit
+        std::unordered_map<std::string, table*>& tables,        // what are the tables involved ?
+        hsql::Expr* eval,                                       // the join / filter expression
+        hsql::LimitDescription* limit,                          // max number of returned rows
+        const std::vector<std::string>& ordered_tables          // since unordered_map doesn't retain ordering.
     );
 };
 

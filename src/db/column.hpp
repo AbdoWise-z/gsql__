@@ -23,6 +23,8 @@ public:
     // fixme: maybe find a better way to handle collisions ?
     void buildHashedIndexes (int ex_size);
 
+    std::vector<size_t> hashSearch(tval) const;
+
     bool isSortIndexed() const;
     bool isHashIndexed() const;
 

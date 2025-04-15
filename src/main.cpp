@@ -73,6 +73,111 @@ void show_details(std::vector<std::string> params) {
     }
 }
 
+void show_table(std::vector<std::string> params) {
+    if (params.size() != 3) {
+        std::cout << "Usage: show [table] [start-row] [count]" << std::endl;
+        return;
+    }
+
+    auto name = params[0];
+    auto start = stoi(params[1]);
+    auto count = stoi(params[2]);
+
+    // print the header
+    std::vector<size_t> w;
+
+    if (!tables.contains(name)) {
+        std::cout << "Table " << color(name, RED_FG) << " not found." << std::endl;
+        return;
+    }
+
+    auto table = tables[name];
+    for (int i = 0;i < table->headers.size();i++) {
+        switch (table->columns[i].type) {
+            case STRING:
+                w.push_back(60);
+                break;
+            case INTEGER:
+                w.push_back(25);
+                break;
+            case FLOAT:
+                w.push_back(25);
+                break;
+        }
+
+        count = std::min(count, (int) table->columns[i].data.size() - start);
+
+        std::cout << "";
+        std::cout << std::setw(w[i]) << std::left << color(table->headers[i], GREEN_FG) << "|";
+    }
+
+    std::cout << std::endl;
+
+    for (int i = start; i < start + count; i++) {
+        for (int k = 0;k < table->headers.size();k++) {
+            switch (table->columns[k].type) {
+                case STRING:
+                    std::cout << std::setw(w[k]) << std::left << color(table->columns[k].data[i].s->substr(0, std::min((size_t) 30, table->columns[k].data[i].s->length())), RED_FG)                 << "|";
+                    break;
+                case INTEGER:
+                    std::cout << std::setw(w[k]) << std::left << color(std::to_string(table->columns[k].data[i].i) + " ", CYAN_FG) << "|";
+                    break;
+                case FLOAT:
+                    std::cout << std::setw(w[k]) << std::left << color(std::to_string(table->columns[k].data[i].d) + " ", CYAN_FG) << "|";
+                    break;
+            }
+
+
+        }
+
+        std::cout << std::endl;
+    }
+}
+
+void hash_table(std::vector<std::string> params) {
+    std::vector<std::string> cols;
+    if (params.size() < 1) {
+        std::cout << "Usage: hash [table] [col1] [col2] ..." << std::endl;
+        return;
+    }
+
+    auto name = params[0];
+
+    if (!tables.contains(name)) {
+        std::cout << "Table " << color(name, RED_FG) << " not found." << std::endl;
+        return;
+    }
+
+    auto t = tables[name];
+
+    if (params.size() < 2) {
+        for (auto head: t->headers) {
+            cols.push_back(head);
+        }
+    } else {
+        for (int i = 1; i < params.size();i++) {
+            cols.push_back(params[i]);
+        }
+    }
+
+    for (auto col: cols) {
+        if (std::find(t->headers.begin(), t->headers.end(), col) == t->headers.end()) {
+            std::cout << "Column " << color(col, RED_FG) << " not found." << std::endl;
+            continue;
+        }
+
+        std::cout << "Building hashes for " << color(name, CYAN_FG) << "." << color(col, YELLOW_FG) << " ... ";
+        auto index = std::distance(t->headers.begin(), std::find(t->headers.begin(), t->headers.end(), col));
+        auto& c = t->columns[index];
+        if (c.isHashIndexed()) {
+            std::cout << color("Already indexed.", GREEN_FG) << std::endl;
+            continue;
+        }
+        c.buildHashedIndexes(8);
+        std::cout << color("Done.", GREEN_FG) << std::endl;
+    }
+}
+
 void sql(std::vector<std::string> params) {
     std::string query = "";
     for (int i = 0; i < params.size(); i++) {
@@ -85,7 +190,19 @@ void sql(std::vector<std::string> params) {
     hsql::SQLParserResult result;
     hsql::SQLParser::parse(query, &result);
     try {
-        CPUExecutor::executeQuery(result);
+        auto r_vec = CPUExecutor::executeQuery(result);
+        for (auto t: r_vec) {
+            std::cout << "Result: " << std::endl;
+            std::cout << table::details(t) << std::endl;
+
+            int i = 0;
+            while (tables.contains("result-" + std::to_string(i))) {
+                i++;
+            }
+
+            tables["result-" + std::to_string(i)] = t;
+            std::cout << "Result saved on table: " << color("result-" + std::to_string(i), GREEN_FG) << std::endl;
+        }
     } catch (const std::exception& e) {
         std::cout << "Query failed: " << color(e.what(), RED_FG) << std::endl;
     }
@@ -124,6 +241,8 @@ int main() {
     cli.addCommand("details", show_details);
     cli.addCommand("editor", editor);
     cli.addCommand("dummy", dummy);
+    cli.addCommand("show", show_table);
+    cli.addCommand("hash", hash_table);
 
     cli.run();
     return 0;

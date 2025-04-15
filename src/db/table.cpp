@@ -62,7 +62,11 @@ std::string table::details(table * table) {
         ss << "| -- "
             << std::setw(8) << std::left
             << "(" + typeToString(table->columns[i].type) + ")"
-            << color(table->headers[i], GREEN_FG) << std::endl;
+            << color(table->headers[i], GREEN_FG);
+
+        if (i != table->headers.size() - 1) {
+            ss << std::endl;
+        }
     }
 
     return ss.str();

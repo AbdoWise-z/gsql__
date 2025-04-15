@@ -55,4 +55,12 @@ public:
     const char * what() const noexcept override;
 };
 
+class UnsupportedLiteralError final : public std::exception {
+public:
+    explicit UnsupportedLiteralError();
+    ~UnsupportedLiteralError() noexcept override;
+
+    const char * what() const noexcept override;
+};
+
 #endif //EXECUTOR_HPP

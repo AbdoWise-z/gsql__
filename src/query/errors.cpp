@@ -58,3 +58,12 @@ const char * UnsupportedOperatorError::what() const noexcept {
     s += "] is not yet supported.";
     return s.c_str();
 }
+
+UnsupportedLiteralError::UnsupportedLiteralError() {}
+
+UnsupportedLiteralError::~UnsupportedLiteralError() noexcept {
+}
+
+const char * UnsupportedLiteralError::what() const noexcept {
+    return "Only literals of type [string, int, float] are supported atm.";
+}

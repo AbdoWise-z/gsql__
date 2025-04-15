@@ -27,15 +27,31 @@ void column::buildHashedIndexes(int ex_size) {
     }
 
     for (int i = 0;i < data.size(); i++) {
-        auto hash = MurmurHash3_x64_64(&data[i], sizeof(tval), 0);
-        hash = hash % data.size();
+        auto hash_v = hash(data[i], type);
+        hash_v = hash_v % data.size();
 
-        while (hashed[hash].size() == ex_size) {     // this bucket is filled
-            hash = (hash + 1) % data.size();
+        while (hashed[hash_v].size() == ex_size) {     // this bucket is filled
+            hash_v = (hash_v + 1) % data.size();
         }
 
-        hashed[hash].push_back(i);
+        hashed[hash_v].push_back(i);
     }
+}
+
+std::vector<size_t> column::hashSearch(const tval v) const {
+    auto hash_v = hash(v, type);
+    hash_v = hash_v % data.size();
+    std::vector<size_t> result;
+    while (hashed[hash_v].size() > 0) {
+        for (auto item: hashed[hash_v]) {
+            if (cmp(data[item], v, type) == 0) {
+                result.push_back(item);
+            }
+        }
+        hash_v = (hash_v + 1) % data.size();
+    }
+
+    return result;
 }
 
 bool column::isSortIndexed() const {
