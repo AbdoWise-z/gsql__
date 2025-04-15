@@ -24,7 +24,7 @@ int cmp(const tval& a, const tval& b, const DataType& t);
 
 size_t sizeOf(const tval& v, const DataType& t);
 
-tval copy(const tval& v, const DataType& t);
+tval copy(tval v, const DataType& t);
 
 inline uint64_t hash(const tval& v, const DataType& t) {
     return MurmurHash3_x64_64(t == STRING ? static_cast<const void*>(v.s) : static_cast<const void*>(&v), sizeOf(v, t), SEED);
