@@ -6,10 +6,11 @@
 
 #include <c++/12/cstring>
 
+
 int cmp(const tval& a, const tval& b, const DataType& t) {
     switch (t) {
         case STRING:
-            return strcmp(a.s, b.s);
+            return strcmp(a.s->c_str(), b.s->c_str());
         case INTEGER:
             return a.i > b.i ? 1 : (a.i < b.i ? -1 : 0);
         case FLOAT:
@@ -22,7 +23,7 @@ int cmp(const tval& a, const tval& b, const DataType& t) {
 size_t sizeOf(const tval &v, const DataType &t) {
     switch (t) {
         case STRING:
-            return strlen(v.s);
+            return v.s->length();
         case INTEGER:
             return sizeof(int64_t);
         case FLOAT:

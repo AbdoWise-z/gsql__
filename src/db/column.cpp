@@ -37,3 +37,19 @@ void column::buildHashedIndexes(int ex_size) {
         hashed[hash].push_back(i);
     }
 }
+
+bool column::isSortIndexed() const {
+    return sorted.size() == data.size();
+}
+
+bool column::isHashIndexed() const {
+    return hashed.size() == data.size();
+}
+
+column::~column() {
+    if (type == STRING) {
+        for (const auto i: data) {
+            delete i.s;
+        }
+    }
+}

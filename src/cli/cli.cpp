@@ -90,7 +90,7 @@ void CLI::run() {
         }
         else {
             // Command not found – call fallback.
-            fallback({ cmd });
+            fallback({ line });
         }
     }
 }

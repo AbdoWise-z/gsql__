@@ -5,9 +5,11 @@
 #include "table.hpp"
 
 #include <algorithm>
+#include <iomanip>
 #include <c++/12/stdexcept>
 
 #include "column.hpp"
+#include "utils/konsol.hpp"
 
 table::table() {
     headers = {};
@@ -43,4 +45,25 @@ column & table::operator[](size_t index) {
 
 column & table::operator[](const std::string &name) {
     return columns[std::distance(headers.begin(), std::ranges::find(headers, name))];
+}
+
+table::~table() = default;
+
+std::string table::details(table * table) {
+    std::stringstream ss;
+
+    ss << color(std::to_string(table->headers.size()), RED_FG) << " columns";
+    if (!table->columns.empty()) {
+        ss << ", " << color(std::to_string(table->columns[0].data.size()), RED_FG) << " rows";
+    }
+    ss << std::endl;
+
+    for (int i = 0; i < table->headers.size(); i++) {
+        ss << "| -- "
+            << std::setw(8) << std::left
+            << "(" + typeToString(table->columns[i].type) + ")"
+            << color(table->headers[i], GREEN_FG) << std::endl;
+    }
+
+    return ss.str();
 }

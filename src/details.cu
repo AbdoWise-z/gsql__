@@ -15,7 +15,7 @@ void printCudaDeviceInfo() {
     }
 
     for (int device = 0; device < deviceCount; ++device) {
-        cudaDeviceProp prop;
+        cudaDeviceProp prop{};
         cudaGetDeviceProperties(&prop, device);
 
         std::cout << "=== Device #" << device << " ===\n";

@@ -24,6 +24,11 @@ public:
 
     column& operator[] (size_t index);
     column& operator[] (const std::string& name);
+
+    ~table();
+
+
+    static std::string details(table * table);
 };
 
 

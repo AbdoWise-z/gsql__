@@ -49,10 +49,10 @@ table * fromCSV(std::string path) {
         }
 
         for (auto field: row) {
-            tval val;
+            tval val{};
             switch (field.type()) {
                 case csv::DataType::CSV_STRING:
-                    val.s = field.get<std::string>().c_str();
+                    val.s = new std::string(field.get<std::string>());
                     break;
                 case csv::DataType::CSV_INT8:
                 case csv::DataType::CSV_INT16:

@@ -22,6 +22,11 @@ public:
 
     // fixme: maybe find a better way to handle collisions ?
     void buildHashedIndexes (int ex_size);
+
+    bool isSortIndexed() const;
+    bool isHashIndexed() const;
+
+    ~column();
 };
 
 

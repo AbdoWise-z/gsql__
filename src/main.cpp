@@ -9,10 +9,15 @@
 
 #include "cli/cli.hpp"
 #include "db/db_helper.hpp"
+#include "utils/konsol.hpp"
+
+#include "store.hpp"
+#include "editor/NanoEditor.h"
+#include "query/cpu_executor.hpp"
 
 namespace fs = std::filesystem;
 
-std::unordered_map<std::string, table*> tables;
+
 
 void loadTable(std::vector<std::string> params) {
     std::string path_str = "";
@@ -37,7 +42,7 @@ void loadTable(std::vector<std::string> params) {
     try {
         table* t = fromCSV(p);
         tables[name] = t;
-        std::cout << "Loaded: " << p << ", as: " << name << std::endl;
+        std::cout << "Loaded: " << color(p, GREEN_FG) << ", as: " << color(name, YELLOW_FG) << std::endl;
     } catch (const std::exception& e) {
         std::cout << "Error loading: " << e.what() << std::endl;
     }
@@ -48,57 +53,77 @@ void removeTable(std::vector<std::string> params) {
         if (tables.find(name) != tables.end()) {
             delete tables[name];
             tables.erase(name);
-            std::cout << "Removed: " << name << std::endl;
+            std::cout << "Removed: " << color(name, GREEN_FG) << std::endl;
             return;
         } else {
-            std::cout << "Table: " << name << " not found" << std::endl;
+            std::cout << "Table [" << color(name, RED_FG) << "] not found" << std::endl;
         }
     }
 }
 
-void show_tables(std::vector<std::string> params) {
-    for (auto name: params) {
-        if (tables.find(name) != tables.end()) {
+void show_details(std::vector<std::string> params) {
+    for (const auto& name: params) {
+        if (tables.contains(name)) {
             auto table = tables[name];
-            std::cout << name << ", " << table->headers.size() << " columns";
-            if (table->columns.size() > 0) {
-                std::cout << ", " << table->columns[0].data.size() << " rows";
-            }
-            std::cout << std::endl;
 
-            for (int i = 0; i < table->headers.size(); i++) {
-                std::cout << "| -- "
-                    << "("
-                    << typeToString(table->columns[i].type)
-                    << ")  "
-                    << table->headers[i] << std::endl;
-            }
-
+            std::cout << name << ": " << table::details(table) << std::endl;
         } else {
-            std::cout << "Table: " << name << " not found" << std::endl;
+            std::cout << "Table [" << color(name, RED_FG) << "] not found" << std::endl;
         }
     }
 }
-
 
 void sql(std::vector<std::string> params) {
-    std::cout << "Coming soon in 2025" << std::endl;
+    std::string query = "";
+    for (int i = 0; i < params.size(); i++) {
+        query += params[i];
+        if (i != params.size() - 1) query += " ";
+    }
+
+    std::cout << "Running Query: " << color(query, CYAN_FG) << std::endl;
+
+    hsql::SQLParserResult result;
+    hsql::SQLParser::parse(query, &result);
+    try {
+        CPUExecutor::executeQuery(result);
+    } catch (const std::exception& e) {
+        std::cout << "Query failed: " << color(e.what(), RED_FG) << std::endl;
+    }
 }
 
+void dummy(std::vector<std::string> params) {
+    for (auto name: params) {
+        if (tables.find(name) != tables.end()) {
+            std::cout << "[" << color(name,  RED_FG) <<  "] table with the same name already exists" << std::endl;
+            continue;
+        }
+        tables[name] = new table();
+        std::cout << "Loaded: " << color("data/empty.csv", GREEN_FG) << ", as: " << color(name, YELLOW_FG) << std::endl;
+    }
+}
+
+void editor(std::vector<std::string> params) {
+    std::string result = NanoEditor::edit();
+    sql({result});
+}
 
 
 int main() {
+    tables.clear();
+
     std::cout << "gsql++ running." << std::endl;
     std::cout << "use load / add [path] to load a csv file as table," << std::endl;
     std::cout << "use remove [name] to remove a table," << std::endl;
-    std::cout << "use table [name] / [names] to show table details" << std::endl;
+    std::cout << "use details [name] / [names] to show table details" << std::endl;
     std::cout << "or enter a SQL query" << std::endl;
 
     CLI cli(sql);
     cli.addCommand("load", loadTable);
     cli.addCommand("add",    removeTable);
     cli.addCommand("remove", removeTable);
-    cli.addCommand("table", show_tables);
+    cli.addCommand("details", show_details);
+    cli.addCommand("editor", editor);
+    cli.addCommand("dummy", dummy);
 
     cli.run();
     return 0;
