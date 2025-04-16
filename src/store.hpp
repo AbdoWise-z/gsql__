@@ -9,7 +9,7 @@
 #include <string>
 #include "db/table.hpp"
 
-extern std::unordered_map<std::string, table*> tables;
+extern std::unordered_map<std::string, table*> global_tables;
 
 namespace Cfg {
     extern size_t HashTableExtendableSize;

@@ -34,14 +34,14 @@ void loadTable(std::vector<std::string> params) {
 
     std::string name = p.filename();
     name = name.substr(0, name.find_last_of('.'));
-    if (tables.find(name) != tables.end()) {
+    if (global_tables.find(name) != global_tables.end()) {
         std::cout << "table with the same name already exists" << std::endl;
         return;
     }
 
     try {
         table* t = fromCSV(p);
-        tables[name] = t;
+        global_tables[name] = t;
         std::cout << "Loaded: " << color(p, GREEN_FG) << ", as: " << color(name, YELLOW_FG) << std::endl;
     } catch (const std::exception& e) {
         std::cout << "Error loading: " << e.what() << std::endl;
@@ -50,9 +50,9 @@ void loadTable(std::vector<std::string> params) {
 
 void removeTable(std::vector<std::string> params) {
     for (auto name: params) {
-        if (tables.find(name) != tables.end()) {
-            delete tables[name];
-            tables.erase(name);
+        if (global_tables.find(name) != global_tables.end()) {
+            delete global_tables[name];
+            global_tables.erase(name);
             std::cout << "Removed: " << color(name, GREEN_FG) << std::endl;
             return;
         } else {
@@ -63,8 +63,8 @@ void removeTable(std::vector<std::string> params) {
 
 void show_details(std::vector<std::string> params) {
     for (const auto& name: params) {
-        if (tables.contains(name)) {
-            auto table = tables[name];
+        if (global_tables.contains(name)) {
+            auto table = global_tables[name];
 
             std::cout << name << ": " << table::details(table) << std::endl;
         } else {
@@ -86,12 +86,12 @@ void show_table(std::vector<std::string> params) {
     // print the header
     std::vector<size_t> w;
 
-    if (!tables.contains(name)) {
+    if (!global_tables.contains(name)) {
         std::cout << "Table " << color(name, RED_FG) << " not found." << std::endl;
         return;
     }
 
-    auto table = tables[name];
+    auto table = global_tables[name];
     for (int i = 0;i < table->headers.size();i++) {
         switch (table->columns[i].type) {
             case STRING:
@@ -143,12 +143,12 @@ void hash_table(std::vector<std::string> params) {
 
     auto name = params[0];
 
-    if (!tables.contains(name)) {
+    if (!global_tables.contains(name)) {
         std::cout << "Table " << color(name, RED_FG) << " not found." << std::endl;
         return;
     }
 
-    auto t = tables[name];
+    auto t = global_tables[name];
 
     if (params.size() < 2) {
         for (auto head: t->headers) {
@@ -215,11 +215,11 @@ void sql(std::vector<std::string> params) {
             std::cout << table::details(t) << std::endl;
 
             int i = 0;
-            while (tables.contains("result-" + std::to_string(i))) {
+            while (global_tables.contains("result-" + std::to_string(i))) {
                 i++;
             }
 
-            tables["result-" + std::to_string(i)] = t;
+            global_tables["result-" + std::to_string(i)] = t;
             std::cout << "Result saved on table: " << color("result-" + std::to_string(i), GREEN_FG) << std::endl;
         }
     } catch (const std::exception& e) {
@@ -229,11 +229,11 @@ void sql(std::vector<std::string> params) {
 
 void dummy(std::vector<std::string> params) {
     for (auto name: params) {
-        if (tables.find(name) != tables.end()) {
+        if (global_tables.find(name) != global_tables.end()) {
             std::cout << "[" << color(name,  RED_FG) <<  "] table with the same name already exists" << std::endl;
             continue;
         }
-        tables[name] = new table();
+        global_tables[name] = new table();
         std::cout << "Loaded: " << color("data/empty.csv", GREEN_FG) << ", as: " << color(name, YELLOW_FG) << std::endl;
     }
 }
@@ -245,7 +245,7 @@ void editor(std::vector<std::string> params) {
 
 
 int main() {
-    tables.clear();
+    global_tables.clear();
 
     std::cout << "gsql++ running." << std::endl;
     std::cout << "use load / add [path] to load a csv file as table," << std::endl;

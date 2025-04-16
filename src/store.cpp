@@ -5,7 +5,7 @@
 #include "store.hpp"
 
 
-std::unordered_map<std::string, table*> tables;
+std::unordered_map<std::string, table*> global_tables;
 
 namespace Cfg {
     size_t HashTableExtendableSize = 4;

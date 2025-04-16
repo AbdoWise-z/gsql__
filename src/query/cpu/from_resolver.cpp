@@ -63,7 +63,7 @@ FromResolver::ResolveResult FromResolver::resolve(hsql::TableRef * ref) {
         std::string name = ref->name;
         std::string t_name = ref->name;
 
-        if (!tables.contains(name)) {
+        if (!global_tables.contains(name)) {
             throw NoSuchTableError(name);
         }
 
@@ -72,7 +72,7 @@ FromResolver::ResolveResult FromResolver::resolve(hsql::TableRef * ref) {
         }
 
         table_names.push_back({t_name});
-        table_values.push_back(tables[name]);
+        table_values.push_back(global_tables[name]);
         temporary_table.push_back(false);
 
     } else if (ref->type == hsql::kTableSelect) {
@@ -88,8 +88,8 @@ FromResolver::ResolveResult FromResolver::resolve(hsql::TableRef * ref) {
             auto result = FromResolver::resolve(tableName);
             for (int i = 0;i < result.table_names.size();i++) {
                 auto names = result.table_names[i];
-                auto table = table_values[i];
-                auto temporary = temporary_table[i];
+                auto table = result.tables[i];
+                auto temporary = result.isTemporary[i];
 
                 if (tableName->alias != nullptr) {
                     names = { tableName->alias->name };
