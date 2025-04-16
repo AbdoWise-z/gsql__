@@ -229,7 +229,7 @@ void cfg(std::vector<std::string> params) {
         return;
     }
 
-    if (params[0] == "heXv") {
+    if (params[0] == "htEx") {
         try {
             Cfg::HashTableExtendableSize = std::stoi(params[1]);
             std::cout << "Updated: " << color("Cfg::HashTableExtendableSize", CYAN_FG) << " = " << Cfg::HashTableExtendableSize << std::endl;
