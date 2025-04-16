@@ -9,19 +9,18 @@
 #define FILTER_DEBUG
 
 tensor<char, CPU>* FilterApplier::apply(
-        std::unordered_map<std::string, table *> &tables,
+        FromResolver::ResolveResult *input_data,
         hsql::Expr *eval,
-        hsql::LimitDescription *limit,
-        const std::vector<std::string>& ordered_tables
+        hsql::LimitDescription *limit
     ) {
 
     if (eval == nullptr) { // pass all
         std::vector<size_t> literal_sizes;
 
-        for (const auto& name: ordered_tables) {
-            auto table = tables[name];
+        for (int i = 0;i < input_data->table_names.size();i++) {
+            auto table = input_data->tables[i];
             if (table->columns.empty()) {
-                literal_sizes.push_back(0);
+                return new tensor<char, CPU>({});
             } else {
                 literal_sizes.push_back(table->columns[0].data.size());
             }
@@ -49,8 +48,8 @@ tensor<char, CPU>* FilterApplier::apply(
             // count(left) AND count(right) <= count(this)
             // so I cannot limit either left or right since
             // I may undershoot the limit this way.
-            const auto left_result  = FilterApplier::apply(tables, left,  nullptr, ordered_tables);
-            const auto right_result = FilterApplier::apply(tables, right, nullptr, ordered_tables);
+            const auto left_result  = FilterApplier::apply(input_data, left,  nullptr);
+            const auto right_result = FilterApplier::apply(input_data, right, nullptr);
 
             auto result = new tensor(*left_result && *right_result);
 
@@ -70,13 +69,11 @@ tensor<char, CPU>* FilterApplier::apply(
 
             std::vector<size_t> literal_sizes;
 
-            for (const auto& name: ordered_tables) {
-                auto table = tables[name];
+            for (const auto& table: input_data->tables) {
                 if (table->columns.empty()) {
-                    literal_sizes.push_back(0);
-                } else {
-                    literal_sizes.push_back(table->columns[0].data.size());
+                    return new tensor<char, CPU>({});
                 }
+                literal_sizes.push_back(table->columns[0].data.size());
             }
 
             auto* result = new tensor<char, CPU>(literal_sizes);
@@ -148,7 +145,7 @@ tensor<char, CPU>* FilterApplier::apply(
                     if (tables.size() != 1) {
                         throw std::invalid_argument("Cannot filter on item without it's table name");
                     }
-                    table_name = ordered_tables[0];
+                    table_name = *input_data->table_names[0].begin(); // just take the first alias of the first table
                 } else {
                     table_name = col->table;
                 }
@@ -187,9 +184,9 @@ tensor<char, CPU>* FilterApplier::apply(
                     std::vector<uint64_t> mask;
                     std::vector<size_t> hyperplane_pos;
                     int table_index = 0;
-                    for (int i = 0;i < ordered_tables.size(); ++i) {
+                    for (int i = 0;i < input_data->table_names.size(); ++i) {
                         hyperplane_pos.push_back(0);
-                        if (ordered_tables[i] == table_name) {
+                        if (input_data->table_names[i].contains(table_name)) {
                             mask.push_back(0);
                             table_index = i;
                         } else {
@@ -219,9 +216,9 @@ tensor<char, CPU>* FilterApplier::apply(
                     std::vector<uint64_t> mask;
                     std::vector<size_t> hyperplane_pos;
                     int table_index = 0;
-                    for (int i = 0;i < ordered_tables.size(); ++i) {
+                    for (int i = 0;i < input_data->table_names.size(); ++i) {
                         hyperplane_pos.push_back(0);
-                        if (ordered_tables[i] == table_name) {
+                        if (input_data->table_names[i].contains(table_name)) {
                             mask.push_back(0);
                             table_index = i;
                         } else {
@@ -285,7 +282,7 @@ tensor<char, CPU>* FilterApplier::apply(
                 if (tables.size() != 1) {
                     throw std::invalid_argument("Cannot filter on item without it's table name");
                 }
-                table_name_l = ordered_tables[0];
+                table_name_l = *input_data->table_names[0].begin();
             } else {
                 table_name_l = left->table;
             }
@@ -294,7 +291,7 @@ tensor<char, CPU>* FilterApplier::apply(
                 if (tables.size() != 1) {
                     throw std::invalid_argument("Cannot filter on item without it's table name");
                 }
-                table_name_r = ordered_tables[0];
+                table_name_r = *input_data->table_names[0].begin();
             } else {
                 table_name_r = right->table;
             }
@@ -353,12 +350,12 @@ tensor<char, CPU>* FilterApplier::apply(
             std::vector<size_t> hyperplane_pos;
             int table_index_l = 0;
             int table_index_r = 0;
-            for (int i = 0;i < ordered_tables.size(); ++i) {
+            for (int i = 0;i < input_data->table_names.size(); ++i) {
                 hyperplane_pos.push_back(0);
-                if (ordered_tables[i] == table_name_l) {
+                if (input_data->table_names[i].contains(table_name_l)) {
                     mask.push_back(0);
                     table_index_l = i;
-                } else if (ordered_tables[i] == table_name_r) {
+                } else if (input_data->table_names[i].contains(table_name_r)) {
                     mask.push_back(0);
                     table_index_r = i;
                 } else {
@@ -398,10 +395,9 @@ tensor<char, CPU>* FilterApplier::apply(
 #endif
         std::vector<size_t> literal_sizes;
 
-        for (const auto& name: ordered_tables) {
-            auto table = tables[name];
+        for (const auto& table: input_data->tables) {
             if (table->columns.empty()) {
-                literal_sizes.push_back(0);
+                return new tensor<char, CPU>({});
             } else {
                 literal_sizes.push_back(table->columns[0].data.size());
             }
@@ -416,10 +412,9 @@ tensor<char, CPU>* FilterApplier::apply(
 #endif
         std::vector<size_t> literal_sizes;
 
-        for (const auto& name: ordered_tables) {
-            auto table = tables[name];
+        for (const auto& table: input_data->tables) {
             if (table->columns.empty()) {
-                literal_sizes.push_back(0);
+                return new tensor<char, CPU>({});
             } else {
                 literal_sizes.push_back(table->columns[0].data.size());
             }
@@ -436,10 +431,9 @@ tensor<char, CPU>* FilterApplier::apply(
 
         std::vector<size_t> literal_sizes;
 
-        for (const auto& name: ordered_tables) {
-            auto table = tables[name];
+        for (const auto& table: input_data->tables) {
             if (table->columns.empty()) {
-                literal_sizes.push_back(0);
+                return new tensor<char, CPU>({});
             } else {
                 literal_sizes.push_back(table->columns[0].data.size());
             }

@@ -6,6 +6,7 @@
 #define CPU_TENSOR_HPP
 
 #include "utils/memory.cuh"
+#include <iostream>
 
 template<typename T>
 class tensor<T, CPU> {

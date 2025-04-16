@@ -6,40 +6,128 @@
 
 #include <hsql/sql/SelectStatement.h>
 
+#include "filter_applier.hpp"
 #include "select_executor.hpp"
 #include "store.hpp"
 #include "query/errors.hpp"
 
-std::unordered_map<std::string, table*> FromResolver::resolve(hsql::TableRef * ref) {
-    std::unordered_map<std::string, table*> res;
+FromResolver::ResolveResult FromResolver::merge(ResolveResult *a, ResolveResult *b) {
+    ResolveResult result;
+    for (int i = 0;i < a->table_names.size();i++) { // add a normally
+        auto names = a->table_names[i];
+        auto table = a->tables[i];
+        auto temporary = a->isTemporary[i];
+
+        result.table_names.push_back(names);
+        result.tables.push_back(table);
+        result.isTemporary.push_back(temporary);
+    }
+
+    for (int i = 0;i < b->table_names.size();i++) {
+        auto names = b->table_names[i];
+        auto table = b->tables[i];
+        auto temporary = b->isTemporary[i];
+
+        // we need to check for dubs
+        for (auto name: names) {
+            auto k = FromResolver::find(&result, name);
+            if (k != -1) {
+                throw std::runtime_error("Duplicate table name: " + name);
+            }
+        }
+
+        result.table_names.push_back(names);
+        result.tables.push_back(table);
+        result.isTemporary.push_back(temporary);
+    }
+
+    return result;
+}
+
+int FromResolver::find(ResolveResult *a, std::string tname) {
+    for (int i = 0;i < a->table_names.size();i++) {
+        if (a->table_names[i].contains(tname)) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+FromResolver::ResolveResult FromResolver::resolve(hsql::TableRef * ref) {
+    std::vector<std::unordered_set<std::string>> table_names;
+    std::vector<table*> table_values;
+    std::vector<bool> temporary_table;
 
     if (ref->type == hsql::kTableName) {
         std::string name = ref->name;
+        std::string t_name = ref->name;
+
         if (!tables.contains(name)) {
             throw NoSuchTableError(name);
         }
-        res[name] = tables[name];
+
+        if (ref->alias != nullptr) {
+            t_name = ref->alias->name;
+        }
+
+        table_names.push_back({t_name});
+        table_values.push_back(tables[name]);
+        temporary_table.push_back(false);
+
     } else if (ref->type == hsql::kTableSelect) {
         if (ref->select == nullptr || ref->alias == nullptr)
             throw std::runtime_error("Invalid table reference");
-        res[ref->alias->name] = SelectExecutor::Execute(ref->select);
+
+        table_names.push_back({ref->alias->name});
+        table_values.push_back(SelectExecutor::Execute(ref->select));
+        temporary_table.push_back(true);
+
     } else if (ref->type == hsql::kTableCrossProduct) {
         for (auto tableName: *(ref->list)) { // execute each sub-import alone and return the final result
             auto result = FromResolver::resolve(tableName);
-            for (auto& [name, table]: result) {
-                if (res.contains(name)) {
-                    throw std::runtime_error("Duplicate table name: " + name);
+            for (int i = 0;i < result.table_names.size();i++) {
+                auto names = result.table_names[i];
+                auto table = table_values[i];
+                auto temporary = temporary_table[i];
+
+                if (tableName->alias != nullptr) {
+                    names = { tableName->alias->name };
                 }
-                res[name] = table;
+
+                table_names.push_back(names);
+                table_values.push_back(table);
+                temporary_table.push_back(temporary);
             }
         }
     } else if (ref->type == hsql::kTableJoin) {
         auto join = ref->join;
-        //fixme: implement this after writing the code for WHERE / ON
-        throw std::runtime_error("Joins will be implemented soon"); // need to implement Where / ON logic first ..
+
+        auto left = FromResolver::resolve(join->left);
+        auto right = FromResolver::resolve(join->right);
+        auto merged = FromResolver::merge(&left, &right);
+
+        auto tensor = FilterApplier::apply(&merged, join->condition, nullptr);
+        auto result = SelectExecutor::ConstructTable(tensor, &merged);
+        delete tensor;
+
+        std::unordered_set<std::string> final_result;
+        for (auto names: merged.table_names) {
+            for (auto name: names) {
+                final_result.insert(name);
+            }
+        }
+
+        table_names.push_back(final_result);
+        table_values.push_back(result.result);
+        temporary_table.push_back(true);
     } else {
-        throw std::runtime_error("Unkown \"from\" type.");
+        throw std::runtime_error("Unknown \"from\" type.");
     }
 
-    return res;
+    return {
+        .table_names = table_names,
+        .tables = table_values,
+        .isTemporary = temporary_table,
+    };
 }

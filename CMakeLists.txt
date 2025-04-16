@@ -63,6 +63,8 @@ set(SOURCES
         src/query/cpu/select_executor.hpp
         src/query/cpu/filter_applier.cpp
         src/query/cpu/filter_applier.hpp
+        src/utils/string_utils.cpp
+        src/utils/string_utils.hpp
 )
 
 # Create executable

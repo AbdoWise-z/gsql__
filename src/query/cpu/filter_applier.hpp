@@ -7,6 +7,7 @@
 
 #include <hsql/sql/SelectStatement.h>
 
+#include "from_resolver.hpp"
 #include "store.hpp"
 #include "db/table.hpp"
 #include "tensor/tensor.hpp"
@@ -14,10 +15,9 @@
 
 namespace FilterApplier {
      tensor<char, CPU>* apply(
-        std::unordered_map<std::string, table*>& tables,        // what are the tables involved ?
-        hsql::Expr* eval,                                       // the join / filter expression
-        hsql::LimitDescription* limit,                          // max number of returned rows
-        const std::vector<std::string>& ordered_tables          // since unordered_map doesn't retain ordering.
+         FromResolver::ResolveResult *input_data,
+         hsql::Expr* eval,                                       // the join / filter expression
+         hsql::LimitDescription* limit                           // max number of returned rows
     );
 };
 
