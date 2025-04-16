@@ -15,14 +15,14 @@
 class table {
 public:
     std::vector<std::string> headers;
-    std::vector<column>      columns;
+    std::vector<column*>      columns;
 
     table();
 
     void setHeaders(std::vector<std::string> headers, const std::vector<DataType> &data_types);
     void addRecord(std::vector<tval> record);
 
-    column& operator[] (size_t index);
+    column& operator[] (size_t index) const;
     column& operator[] (const std::string& name);
 
     ~table();

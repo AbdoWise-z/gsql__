@@ -2,8 +2,8 @@
 // Created by xabdomo on 4/16/25.
 //
 
-#ifndef OP_LOGICAL_AND_HPP
-#define OP_LOGICAL_AND_HPP
+#ifndef GREATER_THAN_HPP
+#define GREATER_THAN_HPP
 
 #include <hsql/sql/SelectStatement.h>
 
@@ -12,12 +12,13 @@
 
 
 namespace Ops {
-    tensor<char, CPU>* logical_and(
+    tensor<char, CPU>* greater_than(
         FromResolver::ResolveResult *input_data,
-        hsql::Expr *eval,
+        hsql::Expr *left,
+        hsql::Expr *right,
         hsql::LimitDescription *limit
     );
 }
 
 
-#endif //OP_LOGICAL_AND_HPP
+#endif //GREATER_THAN_HPP

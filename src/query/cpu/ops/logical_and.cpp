@@ -2,23 +2,23 @@
 // Created by xabdomo on 4/16/25.
 //
 
-#include "op_and.hpp"
+#include "logical_and.hpp"
 
 #include "query/cpu/filter_applier.hpp"
 
-#define OP_AND_DEBUG
+#define OP_EQUALS_DEBUG
 
 tensor<char, CPU> * Ops::logical_and(
     FromResolver::ResolveResult *input_data,
-    hsql::Expr *eval,
+    const hsql::Expr *eval,
     hsql::LimitDescription *limit) {
 
-#ifdef OP_AND_DEBUG
+#ifdef OP_EQUALS_DEBUG
     std::cout << "kExprOperator::AND" << std::endl;
 #endif
 
-    auto left  = eval->expr;
-    auto right = eval->expr2;
+    const auto left  = eval->expr;
+    const auto right = eval->expr2;
     // set limit to always be nullptr because
     // count(left) AND count(right) <= count(this)
     // so I cannot limit either left or right since

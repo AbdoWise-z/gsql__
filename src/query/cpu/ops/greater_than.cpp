@@ -2,20 +2,21 @@
 // Created by xabdomo on 4/16/25.
 //
 
-#include "equality.hpp"
+#include "greater_than.hpp"
 
 #include "store.hpp"
 #include "query/errors.hpp"
 
-#define OP_EQUALS_DEBUG
 
-tensor<char, CPU> * Ops::equality(FromResolver::ResolveResult *input_data, hsql::Expr *eval,
-                                  hsql::LimitDescription *limit) {
-#ifdef OP_EQUALS_DEBUG
-    std::cout << "kExprOperator::Equals" << std::endl;
+#define OP_GREATER_DEBUG
+
+tensor<char, CPU> * Ops::greater_than(FromResolver::ResolveResult *input_data,
+    hsql::Expr *left,
+    hsql::Expr *right,
+    hsql::LimitDescription *limit) {
+    #ifdef OP_GREATER_DEBUG
+    std::cout << "kExprOperator::Greater" << std::endl;
 #endif
-    auto left  = eval->expr;
-    auto right = eval->expr2;
     std::vector<size_t> literal_sizes;
     for (const auto& table: input_data->tables) {
         if (table->columns.empty()) {
@@ -23,45 +24,45 @@ tensor<char, CPU> * Ops::equality(FromResolver::ResolveResult *input_data, hsql:
         }
         literal_sizes.push_back(table->columns[0]->data.size());
     }
-    
+
     auto* result = new tensor<char, CPU>(literal_sizes);
     if (left->isLiteral() && right->isLiteral()) {
-#ifdef OP_EQUALS_DEBUG
-        std::cout << "kExprOperator::Equals two literals" << std::endl;
+#ifdef OP_GREATER_DEBUG
+        std::cout << "kExprOperator::Greater two literals" << std::endl;
 #endif
                 // both are literal, just check if they are equal
         if (left->type != right->type) {
             // we know they can't be equal if they can't be the same type (unless they are float and int)
             // fixme: handle case where they are float or int
             result->setAll(0);
-#ifdef OP_EQUALS_DEBUG
-            std::cout << "kExprOperator::Equals type mismatch" << std::endl;
+#ifdef OP_GREATER_DEBUG
+            std::cout << "kExprOperator::Greater type mismatch" << std::endl;
 #endif
             return result;
         }
 
         if (left->type == hsql::ExprType::kExprLiteralString) {
-#ifdef OP_EQUALS_DEBUG
-            std::cout << "kExprOperator::Equals String, left=" << left->name << " & right=" << right->name << std::endl;
+#ifdef OP_GREATER_DEBUG
+            std::cout << "kExprOperator::Greater String, left=" << left->name << " & right=" << right->name << std::endl;
 #endif
             auto r = strcmp(left->name, right->name);
-            result->setAll(r == 0 ? 1 : 0);
+            result->setAll(r > 0 ? 1 : 0);
             return result;
         }
 
         if (left->type == hsql::ExprType::kExprLiteralInt) {
-#ifdef OP_EQUALS_DEBUG
-            std::cout << "kExprOperator::Equals Integer, left=" << left->ival << " & right=" << right->ival << std::endl;
+#ifdef OP_GREATER_DEBUG
+            std::cout << "kExprOperator::Greater Integer, left=" << left->ival << " & right=" << right->ival << std::endl;
 #endif
-            result->setAll(left->ival == right->ival);
+            result->setAll(left->ival > right->ival);
             return result;
         }
 
         if (left->type == hsql::ExprType::kExprLiteralFloat) {
-#ifdef OP_EQUALS_DEBUG
-            std::cout << "kExprOperator::Equals Float, left=" << left->fval << " & right=" << right->fval << std::endl;
+#ifdef OP_GREATER_DEBUG
+            std::cout << "kExprOperator::Greater Float, left=" << left->fval << " & right=" << right->fval << std::endl;
 #endif
-            result->setAll(left->fval == right->fval);
+            result->setAll(left->fval > right->fval);
             return result;
         }
 
@@ -69,19 +70,22 @@ tensor<char, CPU> * Ops::equality(FromResolver::ResolveResult *input_data, hsql:
     }
 
     if (left->isLiteral() || right->isLiteral()) {
-#ifdef OP_EQUALS_DEBUG
-        std::cout << "kExprOperator::Equals one literal" << std::endl;
+#ifdef OP_GREATER_DEBUG
+        std::cout << "kExprOperator::Greater one literal" << std::endl;
 #endif
         // only one of them is literal, the other is a col
         hsql::Expr* literal;
         hsql::Expr* col;
+        bool literal_on_left = false;
 
         if (left->isLiteral()) {
             literal = left;
             col = right;
+            literal_on_left = true;
         } else {
             literal = right;
             col = left;
+            literal_on_left = false;
         }
 
         // now we get the actual column reference from the table.
@@ -117,14 +121,14 @@ tensor<char, CPU> * Ops::equality(FromResolver::ResolveResult *input_data, hsql:
             throw std::invalid_argument("Type mismatch between column and literal");
         }
 
-        if (column_ptr->isHashIndexed()) {
-            // if the column is hash indexed, we can use that to speed up the search
+        if (column_ptr->isSortIndexed()) {
+            // if the column is sorted indexed, we can use that to speed up the search
             // we need to create a mask for the other columns
             // and a hyperplane position for the current column
             // and then we can just fill the result tensor with the matching values
 
-#ifdef OP_EQUALS_DEBUG
-            std::cout << "kExprOperator::Equals Accelerating using hash index" << std::endl;
+#ifdef OP_GREATER_DEBUG
+            std::cout << "kExprOperator::Greater Accelerating using sorted index" << std::endl;
 #endif
             std::vector<uint64_t> mask;
             std::vector<size_t> hyperplane_pos;
@@ -149,7 +153,7 @@ tensor<char, CPU> * Ops::equality(FromResolver::ResolveResult *input_data, hsql:
             else
                 value = create_from(literal->fval);
 
-            auto bucket = column_ptr->hashSearch(value);
+            auto bucket = column_ptr->sortSearch(value, literal_on_left ? column::SST_GT : column::SST_LT);
             deleteValue(value, column_ptr->type);
 
             for (auto r: bucket) {
@@ -174,33 +178,42 @@ tensor<char, CPU> * Ops::equality(FromResolver::ResolveResult *input_data, hsql:
             result->setAll(0);
 
             if (column_ptr->type == STRING) {
-#ifdef OP_EQUALS_DEBUG
-                std::cout << "kExprOperator::Equals literal_val(str)=" << literal->name << std::endl;
+#ifdef OP_GREATER_DEBUG
+                std::cout << "kExprOperator::Greater literal_val(str)=" << literal->name << std::endl;
 #endif
                 for (auto val: column_ptr->data) {
-                    if (strcmp(val.s->c_str(), literal->name) == 0) {
+                    if (
+                        (strcmp(literal->name, val.s->c_str()) > 0 &&  literal_on_left) ||
+                        (strcmp(literal->name, val.s->c_str()) < 0 && !literal_on_left)
+                        ) {
                         result->fill(1, hyperplane_pos, mask);
                     }
 
                     hyperplane_pos[table_index]++;
                 }
             } else if (column_ptr->type == INTEGER) {
-#ifdef OP_EQUALS_DEBUG
-                std::cout << "kExprOperator::Equals literal_val(int)=" << literal->ival << std::endl;
+#ifdef OP_GREATER_DEBUG
+                std::cout << "kExprOperator::Greater literal_val(int)=" << literal->ival << std::endl;
 #endif
                 for (auto val: column_ptr->data) {
-                    if (val.i == literal->ival) {
+                    if (
+                        (literal->ival > val.i &&  literal_on_left) ||
+                        (literal->ival < val.i && !literal_on_left)
+                    ) {
                         result->fill(1, hyperplane_pos, mask);
                     }
 
                     hyperplane_pos[table_index]++;
                 }
             } else {
-#ifdef OP_EQUALS_DEBUG
-                std::cout << "kExprOperator::Equals literal_val(float)=" << literal->fval << std::endl;
+#ifdef OP_GREATER_DEBUG
+                std::cout << "kExprOperator::Greater literal_val(float)=" << literal->fval << std::endl;
 #endif
                 for (auto val: column_ptr->data) {
-                    if (val.d == literal->fval) {
+                    if (
+                        (literal->fval > val.d &&  literal_on_left) ||
+                        (literal->fval < val.d && !literal_on_left)
+                    ) {
                         result->fill(1, hyperplane_pos, mask);
                     }
 
@@ -212,11 +225,10 @@ tensor<char, CPU> * Ops::equality(FromResolver::ResolveResult *input_data, hsql:
         return result;
     }
 
-#ifdef OP_EQUALS_DEBUG
-    std::cout << "kExprOperator::Equals no literal" << std::endl;
+#ifdef OP_GREATER_DEBUG
+    std::cout << "kExprOperator::Greater no literal" << std::endl;
 #endif
     // both are cols
-    // well now we really need those hashes ..
     std::string col_name_l   = left->name;
     std::string table_name_l ;
 
@@ -277,17 +289,17 @@ tensor<char, CPU> * Ops::equality(FromResolver::ResolveResult *input_data, hsql:
 
     // now we have the two columns
     // we need to implement the search logic
-    if (!column_ptr_l->isHashIndexed() && !column_ptr_r->isHashIndexed()) {
-#ifdef OP_EQUALS_DEBUG
-        std::cout << "kExprOperator::Equals no hashes, building ... ";
+    if (!column_ptr_l->isSortIndexed() && !column_ptr_r->isSortIndexed()) {
+#ifdef OP_GREATER_DEBUG
+        std::cout << "kExprOperator::Greater no sorted index, building ... ";
 #endif
         if (column_ptr_r->data.size() > column_ptr_l->data.size()) {
-            column_ptr_r->buildHashedIndexes(Cfg::HashTableExtendableSize);
+            column_ptr_r->buildSortedIndexes();
         } else {
-            column_ptr_l->buildHashedIndexes(Cfg::HashTableExtendableSize);
+            column_ptr_l->buildSortedIndexes();
         }
-#ifdef OP_EQUALS_DEBUG
-        std::cout << "Done" << std::endl;
+#ifdef OP_GREATER_DEBUG
+        std::cout << "Done" << std::endl;;
 #endif
     }
 
@@ -310,19 +322,19 @@ tensor<char, CPU> * Ops::equality(FromResolver::ResolveResult *input_data, hsql:
     result->setAll(0);
 
     // now do the search
-    auto hashed = column_ptr_r;
+    auto sorted = column_ptr_r;
     auto other = column_ptr_l;
     auto hashed_index = table_index_r;
     auto other_index = table_index_l;
-    if (!hashed->isHashIndexed()) {
-        hashed = column_ptr_l;
+    if (!sorted->isSortIndexed()) {
+        sorted = column_ptr_l;
         other = column_ptr_r;
         hashed_index = table_index_l;
         other_index = table_index_r;
     }
 
     for (int i = 0;i < other->data.size();i++) {
-        auto matches = hashed->hashSearch(other->data[i]);
+        auto matches = sorted->sortSearch(other->data[i], other_index == table_index_l ? column::SST_GT : column::SST_LT);
         hyperplane_pos[other_index] = i;
         for (auto match: matches) {
             hyperplane_pos[hashed_index] = match;

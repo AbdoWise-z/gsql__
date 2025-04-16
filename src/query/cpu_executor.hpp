@@ -4,6 +4,7 @@
 
 #ifndef CPU_EXECUTOR_HPP
 #define CPU_EXECUTOR_HPP
+
 #include <hsql/SQLParserResult.h>
 
 #include "db/table.hpp"

@@ -6,7 +6,11 @@
 
 #include <utility>
 
-UnsupportedOperationError::UnsupportedOperationError(hsql::StatementType type) : type(type) {
+UnsupportedOperationError::UnsupportedOperationError(hsql::StatementType type) : msg(std::to_string(type)) {
+}
+
+UnsupportedOperationError::UnsupportedOperationError(std::string msg) : msg(std::move(msg)) {
+
 }
 
 UnsupportedOperationError::~UnsupportedOperationError() noexcept = default;
@@ -14,7 +18,7 @@ UnsupportedOperationError::~UnsupportedOperationError() noexcept = default;
 const char * UnsupportedOperationError::what() const noexcept {
     static std::string s;
     s =  "This type of SQL operation [";
-    s += type;
+    s += msg;
     s += "] is not supported";
     return s.c_str();
 }
@@ -32,6 +36,21 @@ const char * NoSuchTableError::what() const noexcept {
     s += "] doesn't exist";
     return s.c_str();
 }
+
+NoSuchColumnError::NoSuchColumnError(std::string name): name(std::move(name)) {
+}
+
+NoSuchColumnError::~NoSuchColumnError() noexcept {
+}
+
+const char * NoSuchColumnError::what() const noexcept {
+    static std::string s;
+    s =  "Column with signature [";
+    s += name;
+    s += "] doesn't exist";
+    return s.c_str();
+}
+
 
 DuplicateTableError::DuplicateTableError(std::string name): name(std::move(name)) {
 
@@ -66,4 +85,14 @@ UnsupportedLiteralError::~UnsupportedLiteralError() noexcept {
 
 const char * UnsupportedLiteralError::what() const noexcept {
     return "Only literals of type [string, int, float] are supported atm.";
+}
+
+TableSizeMismatch::TableSizeMismatch() {
+}
+
+TableSizeMismatch::~TableSizeMismatch() noexcept {
+}
+
+const char * TableSizeMismatch::what() const noexcept {
+    return "Table size mismatched (this probably will happened due to using Aggregators with normal columns in the same result)";
 }

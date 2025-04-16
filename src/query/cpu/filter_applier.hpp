@@ -8,8 +8,6 @@
 #include <hsql/sql/SelectStatement.h>
 
 #include "from_resolver.hpp"
-#include "store.hpp"
-#include "db/table.hpp"
 #include "tensor/tensor.hpp"
 
 

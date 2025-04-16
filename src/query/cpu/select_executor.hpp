@@ -24,6 +24,8 @@ namespace SelectExecutor {
        tensor<char, CPU>* intermediate,
        const FromResolver::ResolveResult* input
        );
+
+    int getColumn(const ConstructionResult* result, const std::string& table, const std::string& column);
 };
 
 

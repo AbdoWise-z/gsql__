@@ -34,10 +34,10 @@ size_t sizeOf(const tval &v, const DataType &t) {
 }
 
 tval copy(const tval v, const DataType& t) {
-    tval result;
+    tval result{};
 
     if (t == STRING) {
-        result.s = new std::string(v.s->c_str());
+        result.s = new std::string(*v.s);
     } else if (t == INTEGER) {
         result.i = static_cast<int64_t>(v.i);
     } else {

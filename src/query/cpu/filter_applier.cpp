@@ -5,7 +5,9 @@
 #include "filter_applier.hpp"
 
 #include "ops/equality.hpp"
-#include "ops/op_and.hpp"
+#include "ops/greater_than.hpp"
+#include "ops/logical_and.hpp"
+#include "ops/logical_or.hpp"
 #include "query/errors.hpp"
 
 #define FILTER_DEBUG
@@ -24,7 +26,7 @@ tensor<char, CPU>* FilterApplier::apply(
             if (table->columns.empty()) {
                 return new tensor<char, CPU>({});
             } else {
-                literal_sizes.push_back(table->columns[0].data.size());
+                literal_sizes.push_back(table->columns[0]->data.size());
             }
         }
 
@@ -44,8 +46,45 @@ tensor<char, CPU>* FilterApplier::apply(
             return Ops::logical_and(input_data, eval, limit);
         }
 
+        if (op == hsql::kOpOr) {
+            return Ops::logical_or(input_data, eval, limit);
+        }
+
         if (op == hsql::kOpEquals) {
             return Ops::equality(input_data, eval, limit);
+        }
+
+        if (op == hsql::kOpGreater) {
+            return Ops::greater_than(input_data, eval->expr, eval->expr2, limit);
+        }
+
+        if (op == hsql::kOpLess) {
+            return Ops::greater_than(input_data, eval->expr2, eval->expr, limit);
+        }
+
+        if (op == hsql::kOpGreaterEq) {
+            auto t1 = Ops::greater_than(input_data, eval->expr, eval->expr2, limit);
+            auto t2 = Ops::equality(input_data, eval, limit);
+            auto result = new tensor(*t1 || *t2);
+            delete t1;
+            delete t2;
+            return result; // yes I am lazy sue me ig.
+        }
+
+        if (op == hsql::kOpLessEq) {
+            auto t1 = Ops::greater_than(input_data, eval->expr2, eval->expr, limit);
+            auto t2 = Ops::equality(input_data, eval, limit);
+            auto result = new tensor(*t1 || *t2);
+            delete t1;
+            delete t2;
+            return result;
+        }
+
+        if (op == hsql::kOpNotEquals) {
+            auto t2 = Ops::equality(input_data, eval, limit);
+            auto result = new tensor(!*t2);
+            delete t2;
+            return result;
         }
 
         throw UnsupportedOperatorError(std::to_string(op));
@@ -59,7 +98,7 @@ tensor<char, CPU>* FilterApplier::apply(
             if (table->columns.empty()) {
                 return new tensor<char, CPU>({});
             } else {
-                literal_sizes.push_back(table->columns[0].data.size());
+                literal_sizes.push_back(table->columns[0]->data.size());
             }
         }
 
@@ -76,7 +115,7 @@ tensor<char, CPU>* FilterApplier::apply(
             if (table->columns.empty()) {
                 return new tensor<char, CPU>({});
             } else {
-                literal_sizes.push_back(table->columns[0].data.size());
+                literal_sizes.push_back(table->columns[0]->data.size());
             }
         }
 
@@ -95,7 +134,7 @@ tensor<char, CPU>* FilterApplier::apply(
             if (table->columns.empty()) {
                 return new tensor<char, CPU>({});
             } else {
-                literal_sizes.push_back(table->columns[0].data.size());
+                literal_sizes.push_back(table->columns[0]->data.size());
             }
         }
 

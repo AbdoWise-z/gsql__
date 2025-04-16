@@ -14,6 +14,7 @@
 #include "store.hpp"
 #include "editor/NanoEditor.h"
 #include "query/cpu_executor.hpp"
+#include "utils/string_utils.hpp"
 
 namespace fs = std::filesystem;
 
@@ -93,7 +94,7 @@ void show_table(std::vector<std::string> params) {
 
     auto table = global_tables[name];
     for (int i = 0;i < table->headers.size();i++) {
-        switch (table->columns[i].type) {
+        switch (table->columns[i]->type) {
             case STRING:
                 w.push_back(60);
                 break;
@@ -105,7 +106,7 @@ void show_table(std::vector<std::string> params) {
                 break;
         }
 
-        count = std::min(count, (int) table->columns[i].data.size() - start);
+        count = std::min(count, static_cast<int>(table->columns[i]->data.size()) - start);
 
         std::cout << "";
         std::cout << std::setw(w[i]) << std::left << color(table->headers[i], GREEN_FG) << "|";
@@ -115,15 +116,15 @@ void show_table(std::vector<std::string> params) {
 
     for (int i = start; i < start + count; i++) {
         for (int k = 0;k < table->headers.size();k++) {
-            switch (table->columns[k].type) {
+            switch (table->columns[k]->type) {
                 case STRING:
-                    std::cout << std::setw(w[k]) << std::left << color(table->columns[k].data[i].s->substr(0, std::min((size_t) 30, table->columns[k].data[i].s->length())), RED_FG)                 << "|";
+                    std::cout << std::setw(w[k]) << std::left << color(StringUtils::limit(*table->columns[k]->data[i].s, 30), RED_FG)                 << "|";
                     break;
                 case INTEGER:
-                    std::cout << std::setw(w[k]) << std::left << color(std::to_string(table->columns[k].data[i].i) + " ", CYAN_FG) << "|";
+                    std::cout << std::setw(w[k]) << std::left << color(std::to_string(table->columns[k]->data[i].i) + " ", CYAN_FG) << "|";
                     break;
                 case FLOAT:
-                    std::cout << std::setw(w[k]) << std::left << color(std::to_string(table->columns[k].data[i].d) + " ", CYAN_FG) << "|";
+                    std::cout << std::setw(w[k]) << std::left << color(std::to_string(table->columns[k]->data[i].d) + " ", CYAN_FG) << "|";
                     break;
             }
 
@@ -169,11 +170,55 @@ void hash_table(std::vector<std::string> params) {
         std::cout << "Building hashes for " << color(name, CYAN_FG) << "." << color(col, YELLOW_FG) << " ... ";
         auto index = std::distance(t->headers.begin(), std::find(t->headers.begin(), t->headers.end(), col));
         auto& c = t->columns[index];
-        if (c.isHashIndexed()) {
+        if (c->isHashIndexed()) {
             std::cout << color("Already indexed.", GREEN_FG) << std::endl;
             continue;
         }
-        c.buildHashedIndexes(Cfg::HashTableExtendableSize);
+        c->buildHashedIndexes(Cfg::HashTableExtendableSize);
+        std::cout << color("Done.", GREEN_FG) << std::endl;
+    }
+}
+
+void sort_table(std::vector<std::string> params) {
+    std::vector<std::string> cols;
+    if (params.size() < 1) {
+        std::cout << "Usage: sort [table] [col1] [col2] ..." << std::endl;
+        return;
+    }
+
+    auto name = params[0];
+
+    if (!global_tables.contains(name)) {
+        std::cout << "Table " << color(name, RED_FG) << " not found." << std::endl;
+        return;
+    }
+
+    auto t = global_tables[name];
+
+    if (params.size() < 2) {
+        for (auto head: t->headers) {
+            cols.push_back(head);
+        }
+    } else {
+        for (int i = 1; i < params.size();i++) {
+            cols.push_back(params[i]);
+        }
+    }
+
+    for (auto col: cols) {
+        if (std::find(t->headers.begin(), t->headers.end(), col) == t->headers.end()) {
+            std::cout << "Column " << color(col, RED_FG) << " not found." << std::endl;
+            continue;
+        }
+
+        std::cout << "Building sorted index for " << color(name, CYAN_FG) << "." << color(col, YELLOW_FG) << " ... ";
+        auto index = std::distance(t->headers.begin(), std::find(t->headers.begin(), t->headers.end(), col));
+        auto& c = t->columns[index];
+        if (c->isHashIndexed()) {
+            std::cout << color("Already indexed.", GREEN_FG) << std::endl;
+            continue;
+        }
+        c->buildSortedIndexes();
         std::cout << color("Done.", GREEN_FG) << std::endl;
     }
 }
@@ -262,6 +307,7 @@ int main() {
     cli.addCommand("dummy", dummy);
     cli.addCommand("show", show_table);
     cli.addCommand("hash", hash_table);
+    cli.addCommand("sort", sort_table);
     cli.addCommand("cfg", cfg);
 
     cli.run();

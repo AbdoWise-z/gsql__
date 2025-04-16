@@ -70,8 +70,16 @@ set(SOURCES
         src/query/cpu/ops/equality.cpp
         src/query/cpu/ops/equality.hpp
 
-        src/query/cpu/ops/op_and.cpp
-        src/query/cpu/ops/op_and.hpp
+        src/query/cpu/ops/logical_and.cpp
+        src/query/cpu/ops/logical_and.hpp
+        src/query/cpu/ops/logical_or.cpp
+        src/query/cpu/ops/logical_or.hpp
+        src/query/cpu/ops/greater_than.cpp
+        src/query/cpu/ops/greater_than.hpp
+        src/query/cpu/agg/sum_avg_count.cpp
+        src/query/cpu/agg/sum_avg_count.hpp
+        src/query/cpu/agg/max_min.cpp
+        src/query/cpu/agg/max_min.hpp
 )
 
 # Create executable

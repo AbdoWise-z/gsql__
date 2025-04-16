@@ -177,6 +177,40 @@ public:
 
         return result;
     }
+
+    tensor operator||(const tensor<T, CPU>& other) {
+        if (other.shape != this->shape) {
+            throw std::runtime_error("[AND] Tensor size mismatch");
+        }
+
+        tensor result(this->shape);
+        size_t acc = 1;
+        for (const size_t i : shape) {
+            acc *= i;
+        }
+
+        for (size_t i = 0;i < acc;i++) {
+            result.data[i] = this->data[i] || other.data[i];
+        }
+
+        return result;
+    }
+
+    tensor operator!() {
+
+        tensor result(this->shape);
+
+        size_t acc = 1;
+        for (const size_t i : shape) {
+            acc *= i;
+        }
+
+        for (size_t i = 0;i < acc;i++) {
+            result.data[i] = !this->data[i];
+        }
+
+        return result;
+    }
 };
 
 

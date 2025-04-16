@@ -118,6 +118,14 @@ FromResolver::ResolveResult FromResolver::resolve(hsql::TableRef * ref) {
             }
         }
 
+        for (int i = 0;i < merged.tables.size();i++) {
+            // clean up
+            if (merged.isTemporary[i]) {
+                delete merged.tables[i];
+            }
+        }
+
+
         table_names.push_back(final_result);
         table_values.push_back(result.result);
         temporary_table.push_back(true);

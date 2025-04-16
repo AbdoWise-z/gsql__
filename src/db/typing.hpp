@@ -7,9 +7,9 @@
 #include <string>
 
 enum DataType {
-    STRING,
-    INTEGER,
-    FLOAT
+    STRING = 0,
+    INTEGER = 1,
+    FLOAT = 2
 };
 
 std::string typeToString(DataType);

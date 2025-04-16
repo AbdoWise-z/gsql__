@@ -19,15 +19,23 @@ public:
     std::vector<std::vector<size_t>> hashed;
 
     void buildSortedIndexes ();
-
-    // fixme: maybe find a better way to handle collisions ?
     void buildHashedIndexes (int ex_size);
 
-    std::vector<size_t> hashSearch(tval) const;
+    [[nodiscard]] std::vector<size_t> hashSearch(tval) const;
 
-    bool isSortIndexed() const;
-    bool isHashIndexed() const;
+    enum SortedSearchType {
+        SST_GT,
+        SST_LT,
+        SST_GTE,
+        SST_LTE
+    };
 
+    [[nodiscard]] std::vector<size_t> sortSearch(tval, SortedSearchType) const;
+
+    [[nodiscard]] bool isSortIndexed() const;
+    [[nodiscard]] bool isHashIndexed() const;
+
+    [[nodiscard]] column* copy() const;
     ~column();
 };
 

@@ -5,7 +5,6 @@
 #include "column.hpp"
 
 #include "value_helper.hpp"
-#include "utils/murmur_hash3.hpp"
 
 void column::buildSortedIndexes() {
     sorted.clear();
@@ -14,8 +13,8 @@ void column::buildSortedIndexes() {
         sorted.push_back(i);
     }
 
-    std::ranges::sort(sorted, [this](const auto& a, const auto& b) {
-        return cmp(data[a], data[b], type);
+    std::sort(sorted.begin(), sorted.end(), [this](const auto& a, const auto& b) {
+        return cmp(data[a], data[b], type) > 0;
     });
 }
 
@@ -54,12 +53,74 @@ std::vector<size_t> column::hashSearch(const tval v) const {
     return result;
 }
 
+std::vector<size_t> column::sortSearch(tval v, SortedSearchType t) const {
+    std::vector<size_t> result;
+    auto it = sorted.begin();
+    auto it2 = sorted.begin();
+    switch (t) {
+        case SST_GT:
+            it = std::lower_bound(sorted.begin(), sorted.end(), v, [&] (auto a, auto val) {
+                return cmp(val, data[a], type) > 0;
+            });
+            while (it != sorted.end()) {
+                result.push_back(*it);
+                ++it;
+            }
+            break;
+        case SST_GTE:
+            it = std::lower_bound(sorted.begin(), sorted.end(), v, [&] (auto a, auto val) {
+                return cmp(val, data[a], type) >= 0;
+            });
+            while (it != sorted.end()) {
+                result.push_back(*it);
+                ++it;
+            }
+            break;
+
+        case SST_LT:
+            it = std::upper_bound(sorted.begin(), sorted.end(), v, [&] (auto val, auto a) {
+                return cmp(val, data[a], type) < 0;
+            });
+
+            while (it2 != it) {
+                result.push_back(*it);
+                ++it2;
+            }
+            break;
+
+        case SST_LTE:
+            it = std::upper_bound(sorted.begin(), sorted.end(), v, [&] (auto val, auto a) {
+                return cmp(val, data[a], type) <= 0;
+            });
+
+            while (it2 != it) {
+                result.push_back(*it);
+                ++it2;
+            }
+            break;
+    }
+
+    return result;
+}
+
 bool column::isSortIndexed() const {
-    return sorted.size() == data.size();
+    return sorted.size() == data.size() && !sorted.empty();
 }
 
 bool column::isHashIndexed() const {
-    return hashed.size() == data.size();
+    return hashed.size() == data.size() && !hashed.empty();
+}
+
+column* column::copy() const {
+    auto result = new column();
+    result->type = type;
+    result->data.resize(data.size());
+
+    for (auto i = 0;i < data.size();i++) {
+        result->data[i] = ::copy(data[i], type);
+    }
+
+    return result;
 }
 
 column::~column() {

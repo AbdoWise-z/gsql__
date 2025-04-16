@@ -10,14 +10,15 @@
 
 class UnsupportedOperationError final : public std::exception {
 private:
-    hsql::StatementType type;
-
+    std::string msg;
 public:
     explicit UnsupportedOperationError(hsql::StatementType type);
+    explicit UnsupportedOperationError(std::string msg);
     ~UnsupportedOperationError() noexcept override;
 
     const char * what() const noexcept override;
 };
+
 
 
 class NoSuchTableError final : public std::exception {
@@ -31,6 +32,16 @@ public:
     const char * what() const noexcept override;
 };
 
+class NoSuchColumnError final : public std::exception {
+private:
+    std::string name;
+
+public:
+    explicit NoSuchColumnError(std::string  name);
+    ~NoSuchColumnError() noexcept override;
+
+    const char * what() const noexcept override;
+};
 
 class DuplicateTableError final : public std::exception {
 private:
@@ -59,6 +70,14 @@ class UnsupportedLiteralError final : public std::exception {
 public:
     explicit UnsupportedLiteralError();
     ~UnsupportedLiteralError() noexcept override;
+
+    const char * what() const noexcept override;
+};
+
+class TableSizeMismatch final : public std::exception {
+public:
+    explicit TableSizeMismatch();
+    ~TableSizeMismatch() noexcept override;
 
     const char * what() const noexcept override;
 };
