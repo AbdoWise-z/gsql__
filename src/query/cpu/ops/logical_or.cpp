@@ -5,12 +5,14 @@
 #include "logical_or.hpp"
 #include "query/cpu/filter_applier.hpp"
 
-#define OP_OR_DEBUG
+// #define OP_OR_DEBUG
 
 tensor<char, CPU> * Ops::logical_or(
     FromResolver::ResolveResult *input_data,
     const hsql::Expr *eval,
-    hsql::LimitDescription *limit) {
+    hsql::LimitDescription *limit,
+    const std::vector<size_t>& tile_start,
+    const std::vector<size_t>& tile_size) {
 #ifdef OP_OR_DEBUG
     std::cout << "kExprOperator::OR" << std::endl;
 #endif
@@ -18,8 +20,8 @@ tensor<char, CPU> * Ops::logical_or(
     const auto left  = eval->expr;
     const auto right = eval->expr2;
 
-    const auto left_result  = FilterApplier::apply(input_data, left,  limit);
-    const auto right_result = FilterApplier::apply(input_data, right, limit);
+    const auto left_result  = FilterApplier::apply(input_data, left,  limit, tile_start, tile_size);
+    const auto right_result = FilterApplier::apply(input_data, right, limit, tile_start, tile_size);
 
     auto result = new tensor(*left_result || *right_result);
 

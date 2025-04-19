@@ -239,6 +239,17 @@ void cfg(std::vector<std::string> params) {
         }
     }
 
+
+    if (params[0] == "mTE") {
+        try {
+            Cfg::maxTensorElements = std::stoi(params[1]);
+            std::cout << "Updated: " << color("Cfg::maxTensorElements", CYAN_FG) << " = " << Cfg::maxTensorElements << std::endl;
+            return;
+        } catch (std::exception& e) {
+            std::cout << "Error modifying configuration: " << e.what() << std::endl;
+        }
+    }
+
     std::cout << "Unknown param." << std::endl;
 }
 

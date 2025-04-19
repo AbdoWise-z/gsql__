@@ -27,6 +27,8 @@ public:
 
     ~table();
 
+    size_t size() const;
+
 
     static std::string details(table * table);
 };

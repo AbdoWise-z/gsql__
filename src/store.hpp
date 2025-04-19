@@ -13,6 +13,10 @@ extern std::unordered_map<std::string, table*> global_tables;
 
 namespace Cfg {
     extern size_t HashTableExtendableSize;
+
+    extern size_t maxTensorElements;
+
+    std::vector<size_t> getTileSizeFor(const std::vector<size_t>& inputSize);
 }
 
 

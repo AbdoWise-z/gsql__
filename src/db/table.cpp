@@ -54,6 +54,14 @@ table::~table() {
     headers.clear();
 }
 
+size_t table::size() const {
+    if (columns.size() == 0) {
+        return 0;
+    }
+
+    return columns[0]->data.size();
+}
+
 std::string table::details(table * table) {
     std::stringstream ss;
 

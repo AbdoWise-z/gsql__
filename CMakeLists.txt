@@ -80,6 +80,7 @@ set(SOURCES
         src/query/cpu/agg/sum_avg_count.hpp
         src/query/cpu/agg/max_min.cpp
         src/query/cpu/agg/max_min.hpp
+        src/utils/clp.hpp
 )
 
 # Create executable
@@ -102,3 +103,75 @@ set_source_files_properties(
         src/details.cu
         PROPERTIES LANGUAGE CUDA
 )
+
+add_executable(
+        Sandbox
+        src/Sandbox.cpp
+
+        src/tensor/tensor.hpp
+        src/tensor/cpu_tensor.hpp
+        src/tensor/gpu_tensor.hpp
+
+        src/utils/memory.cu
+        src/utils/memory.cuh
+
+        src/db/column.cpp
+        src/db/column.hpp
+
+        src/utils/murmur_hash3.cpp
+        src/utils/murmur_hash3.hpp
+
+        src/db/typing.hpp
+
+        src/db/value_helper.cpp
+        src/db/value_helper.hpp
+
+        src/db/table.cpp
+        src/db/table.hpp
+
+        src/db/db_helper.cpp
+        src/db/db_helper.hpp
+
+        src/cli/cli.cpp
+        src/cli/cli.hpp
+
+        src/utils/konsol.cpp
+        src/utils/konsol.hpp
+
+        src/query/cpu_executor.cpp
+        src/query/cpu_executor.hpp
+        src/query/errors.cpp
+        src/query/errors.hpp
+
+        src/store.cpp
+        src/store.hpp
+
+        src/editor/NanoEditor.cpp
+        src/editor/NanoEditor.h
+        src/query/cpu/from_resolver.cpp
+        src/query/cpu/from_resolver.hpp
+        src/query/cpu/select_executor.cpp
+        src/query/cpu/select_executor.hpp
+        src/query/cpu/filter_applier.cpp
+        src/query/cpu/filter_applier.hpp
+
+        src/utils/string_utils.cpp
+        src/utils/string_utils.hpp
+
+        src/query/cpu/ops/equality.cpp
+        src/query/cpu/ops/equality.hpp
+
+        src/query/cpu/ops/logical_and.cpp
+        src/query/cpu/ops/logical_and.hpp
+        src/query/cpu/ops/logical_or.cpp
+        src/query/cpu/ops/logical_or.hpp
+        src/query/cpu/ops/greater_than.cpp
+        src/query/cpu/ops/greater_than.hpp
+        src/query/cpu/agg/sum_avg_count.cpp
+        src/query/cpu/agg/sum_avg_count.hpp
+        src/query/cpu/agg/max_min.cpp
+        src/query/cpu/agg/max_min.hpp
+        src/utils/clp.hpp
+)
+
+target_link_libraries(Sandbox PUBLIC sqlparser)

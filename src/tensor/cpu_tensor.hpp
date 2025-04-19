@@ -22,6 +22,15 @@ private:
                 index += pos[i] * acc;
                 acc *= shape[i];
             }
+
+            if (index >= totalSize()) {
+                std::stringstream ss;
+                for (size_t i = 0; i < dims.size(); i++) {
+                    ss << pos[i] << " ";
+                }
+                throw std::invalid_argument("Tensor::fill_hyperplane: index out of range [" + ss.str() + "]");
+            }
+
             data[index] = t;
             return;
         }
@@ -41,15 +50,18 @@ public:
 
     explicit tensor(const std::vector<size_t>& shape) : shape(shape) {
         //std::cout << "CPU create from shape\n";
+        //std::cout << "Alloc: " << sizeof(T) * std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<>()) << std::endl;
         data = static_cast<T *>(malloc(sizeof(T) * std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<>())));
     }
 
     tensor(T* data, const std::vector<size_t>& shape) : shape(shape), data(data) {
         //std::cout << "CPU create from shape & data\n";
+
     }
 
     tensor(const tensor& other) : shape(other.shape) {
         //std::cout << "CPU create from copy\n";
+        //std::cout << "Alloc: " << sizeof(T) * std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<>()) << std::endl;
         data = static_cast<T *>(malloc(sizeof(T) * std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<>())));
         std::copy(other.data, other.data + std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<>()), data);
     }
@@ -156,6 +168,7 @@ public:
     }
 
     ~tensor() {
+        //std::cout << "Free: " << sizeof(T) * std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<>()) << std::endl;
         free(data);
         data = nullptr;
     }

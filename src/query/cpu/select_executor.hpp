@@ -25,7 +25,17 @@ namespace SelectExecutor {
        const FromResolver::ResolveResult* input
        );
 
+    void AppendTable(
+       tensor<char, CPU>* intermediate,
+       const FromResolver::ResolveResult* input,
+       const std::vector<size_t> &offset,
+       const table* result
+       );
+
     int getColumn(const ConstructionResult* result, const std::string& table, const std::string& column);
+
+    typedef std::vector<size_t> MultDimVector;
+    std::vector<MultDimVector> Schedule(const std::vector<size_t> &inputSize);
 };
 
 

@@ -9,6 +9,7 @@
 
 #include "filter_applier.hpp"
 #include "from_resolver.hpp"
+#include "store.hpp"
 #include "agg/max_min.hpp"
 #include "agg/sum_avg_count.hpp"
 #include "db/table.hpp"
@@ -33,7 +34,7 @@ table* SelectExecutor::Execute(hsql::SQLStatement *statement) {
     auto query_input = FromResolver::resolve(from);
 
 #ifdef SELECT_DEBUG
-    std::cout << "Query IN:" << std::endl;
+    std::cout << "Query: " << std::endl;
     for (int i = 0;i < query_input.table_names.size();i++) {
         auto k = StringUtils::join(query_input.table_names[i].begin(), query_input.table_names[i].end());
         k = StringUtils::limit(k, 24 * 2);
@@ -46,10 +47,69 @@ table* SelectExecutor::Execute(hsql::SQLStatement *statement) {
     auto where = stmnt->whereClause;
     auto limit = stmnt->limit;
 
+    std::vector<size_t> inputSize;
+    for (auto k : query_input.tables) {
+        if (k->columns.size() > 0) {
+            inputSize.push_back(k->size());
+        } else {
+            inputSize.push_back(0);
+        }
+    }
+
+    auto tileSize = Cfg::getTileSizeFor(inputSize);
     // apply the Where filter
-    auto intermediate = FilterApplier::apply(&query_input, where, limit);
-    auto result = ConstructTable(intermediate, &query_input);
-    delete intermediate;
+    ConstructionResult result {
+        .result = nullptr,
+        .col_source = {}
+    };
+
+    auto tiles = Schedule(inputSize);
+
+#ifdef SELECT_DEBUG
+    std::cout << "Input size: [ ";
+    for (auto i : inputSize) {
+        std::cout << std::dec << i << " ";
+    }
+    std::cout << "]" << std::endl;
+    std::cout << "Tile size: [ ";
+    for (auto i : tileSize) {
+        std::cout << std::dec << i << " ";
+    }
+    std::cout << "]" << std::endl;
+    std::cout << "Total number of tiles: " << std::dec << tiles.size() << std::endl;
+#endif
+
+    size_t debug_current_tile = 0;
+#ifdef SELECT_DEBUG
+    std::cout << "Progress: 0/" << std::dec << tiles.size();
+    std::cout.flush();
+#endif
+    for (auto tile: tiles) {
+        auto intermediate = FilterApplier::apply(
+            &query_input,
+            where,
+            limit,
+            tile,
+            tileSize
+            );
+
+        if (result.result == nullptr) {
+            result = ConstructTable(intermediate, &query_input);
+        } else {
+            AppendTable(intermediate, &query_input, tile, result.result);
+        }
+
+
+#ifdef SELECT_DEBUG
+        std::cout << "\rProgress: " << std::dec << (++debug_current_tile) << "/" << std::dec << tiles.size();
+        std::cout.flush();
+#endif
+        delete intermediate;
+    }
+
+#ifdef SELECT_DEBUG
+    std::cout << std::endl;
+#endif
 
     // clean up any temp tables created in the process
     for (int i = 0;i < query_input.tables.size();i++) {
@@ -198,9 +258,18 @@ SelectExecutor::ConstructionResult SelectExecutor::ConstructTable(
     for (size_t i = 0; i < resultSize; i++) {
         if ((*intermediate)[i]) {
             auto tuple_index = intermediate->unmap(i);
+
+            bool _in_bound = true;
+            for (int m = 0;m < input->table_names.size();m++) {
+                if (input->tables[m]->size() <= tuple_index[m]) {
+                    _in_bound = false;
+                    break;
+                }
+            }
+            if (!_in_bound) continue;
+
             int j = 0;
             for (int m = 0;m < input->tables.size();m++) {
-                auto name = input->table_names[m];
                 const auto t = input->tables[m];
                 for (int k = 0;k < t->headers.size();k++) {
                     auto val = t->columns[k]->data[tuple_index[m]];
@@ -217,6 +286,45 @@ SelectExecutor::ConstructionResult SelectExecutor::ConstructTable(
     };
 }
 
+void SelectExecutor::AppendTable(
+    tensor<char, CPU> *intermediate,
+    const FromResolver::ResolveResult *input,
+    const std::vector<size_t> &offset,
+    const table *result
+    ) {
+
+    std::vector<size_t> pos(offset.size(), 0);
+
+    for (size_t i = 0; i < intermediate->totalSize(); i++) {
+        if ((*intermediate)[i]) {
+
+            auto tuple_index = intermediate->unmap(i);
+            for (int j = 0;j < pos.size();j++) {
+                pos[j] = offset[j] + tuple_index[j];
+            }
+
+            bool _in_bound = true;
+            for (int m = 0;m < input->table_names.size();m++) {
+                if (input->tables[m]->size() <= pos[m]) {
+                    _in_bound = false;
+                    break;
+                }
+            }
+            if (!_in_bound) continue;
+
+            int j = 0;
+            for (int m = 0;m < input->tables.size();m++) {
+                const auto t = input->tables[m];
+                for (int k = 0;k < t->headers.size();k++) {
+                    auto val = t->columns[k]->data[pos[m]];
+                    result->columns[j]->data.push_back(copy(val, t->columns[k]->type));
+                    j++;
+                }
+            }
+        }
+    }
+}
+
 int SelectExecutor::getColumn(const ConstructionResult *result, const std::string& table, const std::string& column) {
     bool table_found = false;
     for (int i = 0;i < result->col_source.size();i++) {
@@ -230,4 +338,36 @@ int SelectExecutor::getColumn(const ConstructionResult *result, const std::strin
 
     if (table_found) return -1;
     return -2; // didn't even find the table
+}
+
+static void ScheduleInternalRecursive(
+        std::vector<SelectExecutor::MultDimVector>& result,
+        const std::vector<size_t>& inputSize,
+        const std::vector<size_t>& tileSize,
+        SelectExecutor::MultDimVector pos,
+        int dim = 0
+    ) {
+
+    if (dim != inputSize.size()) {
+        size_t iter = (inputSize[dim] - 1) / tileSize[dim] + 1;
+        for (int i = 0;i < iter;i++) {
+            pos[dim] = i * tileSize[dim];
+            ScheduleInternalRecursive(
+                result,
+                inputSize,
+                tileSize,
+                pos,
+                dim + 1);
+        }
+    } else {
+        result.push_back(pos);
+    }
+}
+
+std::vector<SelectExecutor::MultDimVector> SelectExecutor::Schedule(const std::vector<size_t> &inputSize) {
+    std::vector<MultDimVector> result;
+    std::vector<size_t> _startPos(inputSize.size(), 0);
+    std::vector<size_t> _tileSize = Cfg::getTileSizeFor(inputSize);
+    ScheduleInternalRecursive(result, inputSize, _tileSize, _startPos, 0);
+    return result;
 }

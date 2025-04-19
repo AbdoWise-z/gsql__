@@ -16,7 +16,9 @@ namespace Ops {
         FromResolver::ResolveResult *input_data,
         hsql::Expr *left,
         hsql::Expr *right,
-        hsql::LimitDescription *limit
+        hsql::LimitDescription *limit,
+        const std::vector<size_t>& tile_start = {},
+        const std::vector<size_t>& tile_size = {}
     );
 }
 

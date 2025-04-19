@@ -8,24 +8,37 @@
 #include "query/errors.hpp"
 
 
-#define OP_GREATER_DEBUG
+// #define OP_GREATER_DEBUG
 
-tensor<char, CPU> * Ops::greater_than(FromResolver::ResolveResult *input_data,
+tensor<char, CPU> * Ops::greater_than(
+    FromResolver::ResolveResult *input_data,
     hsql::Expr *left,
     hsql::Expr *right,
-    hsql::LimitDescription *limit) {
+    hsql::LimitDescription *limit,
+    const std::vector<size_t>& tile_start,
+    const std::vector<size_t>& tile_size) {
+
     #ifdef OP_GREATER_DEBUG
     std::cout << "kExprOperator::Greater" << std::endl;
 #endif
-    std::vector<size_t> literal_sizes;
-    for (const auto& table: input_data->tables) {
+    std::vector<size_t> result_size;
+
+    for (int i = 0;i < input_data->table_names.size();i++) {
+        auto table = input_data->tables[i];
         if (table->columns.empty()) {
             return new tensor<char, CPU>({});
+        } else {
+            if (!tile_size.empty())
+                result_size.push_back(tile_size[i]);
+            else
+                result_size.push_back(table->columns[0]->data.size());
         }
-        literal_sizes.push_back(table->columns[0]->data.size());
     }
 
-    auto* result = new tensor<char, CPU>(literal_sizes);
+    std::vector<size_t> result_offset(result_size.size(), 0);
+    if (!tile_start.empty()) result_offset = tile_start;
+
+    auto* result = new tensor<char, CPU>(result_size);
     if (left->isLiteral() && right->isLiteral()) {
 #ifdef OP_GREATER_DEBUG
         std::cout << "kExprOperator::Greater two literals" << std::endl;
@@ -157,7 +170,13 @@ tensor<char, CPU> * Ops::greater_than(FromResolver::ResolveResult *input_data,
             deleteValue(value, column_ptr->type);
 
             for (auto r: bucket) {
-                hyperplane_pos[table_index] = r;
+                if (r < result_offset[table_index] || r >= result_offset[table_index] + result_size[table_index]) {
+                    // we need to check if the index is in the current tile
+                    // if not, we skip it
+                    continue;
+                }
+
+                hyperplane_pos[table_index] = r - result_offset[table_index];
                 result->fill(1, hyperplane_pos, mask);
             }
 
@@ -181,7 +200,8 @@ tensor<char, CPU> * Ops::greater_than(FromResolver::ResolveResult *input_data,
 #ifdef OP_GREATER_DEBUG
                 std::cout << "kExprOperator::Greater literal_val(str)=" << literal->name << std::endl;
 #endif
-                for (auto val: column_ptr->data) {
+                for (int i = result_offset[table_index]; i < result_offset[table_index] + result_size[table_index]; i++) {
+                    auto val = column_ptr->data[i];
                     if (
                         (strcmp(literal->name, val.s->c_str()) > 0 &&  literal_on_left) ||
                         (strcmp(literal->name, val.s->c_str()) < 0 && !literal_on_left)
@@ -195,7 +215,8 @@ tensor<char, CPU> * Ops::greater_than(FromResolver::ResolveResult *input_data,
 #ifdef OP_GREATER_DEBUG
                 std::cout << "kExprOperator::Greater literal_val(int)=" << literal->ival << std::endl;
 #endif
-                for (auto val: column_ptr->data) {
+                for (int i = result_offset[table_index]; i < result_offset[table_index] + result_size[table_index]; i++) {
+                    auto val = column_ptr->data[i];
                     if (
                         (literal->ival > val.i &&  literal_on_left) ||
                         (literal->ival < val.i && !literal_on_left)
@@ -209,7 +230,8 @@ tensor<char, CPU> * Ops::greater_than(FromResolver::ResolveResult *input_data,
 #ifdef OP_GREATER_DEBUG
                 std::cout << "kExprOperator::Greater literal_val(float)=" << literal->fval << std::endl;
 #endif
-                for (auto val: column_ptr->data) {
+                for (int i = result_offset[table_index]; i < result_offset[table_index] + result_size[table_index]; i++) {
+                    auto val = column_ptr->data[i];
                     if (
                         (literal->fval > val.d &&  literal_on_left) ||
                         (literal->fval < val.d && !literal_on_left)
@@ -333,10 +355,14 @@ tensor<char, CPU> * Ops::greater_than(FromResolver::ResolveResult *input_data,
         other_index = table_index_r;
     }
 
-    for (int i = 0;i < other->data.size();i++) {
+    for (int i = result_offset[other_index];i < result_offset[other_index] + result_size[other_index];i++) {
         auto matches = sorted->sortSearch(other->data[i], other_index == table_index_l ? column::SST_GT : column::SST_LT);
-        hyperplane_pos[other_index] = i;
+        hyperplane_pos[other_index] = i - result_offset[other_index];
         for (auto match: matches) {
+            if (match < result_offset[hashed_index] || match >= result_offset[hashed_index] + result_size[hashed_index]) {
+                continue;
+            }
+
             hyperplane_pos[hashed_index] = match;
             result->fill(1, hyperplane_pos, mask);
         }

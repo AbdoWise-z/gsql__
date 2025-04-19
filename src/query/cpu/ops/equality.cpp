@@ -7,24 +7,38 @@
 #include "store.hpp"
 #include "query/errors.hpp"
 
-#define OP_EQUALS_DEBUG
+// #define OP_EQUALS_DEBUG
 
-tensor<char, CPU> * Ops::equality(FromResolver::ResolveResult *input_data, hsql::Expr *eval,
-                                  hsql::LimitDescription *limit) {
+tensor<char, CPU> * Ops::equality(
+    FromResolver::ResolveResult *input_data,
+    hsql::Expr *eval,
+    hsql::LimitDescription *limit,
+    const std::vector<size_t>& tile_start,
+    const std::vector<size_t>& tile_size) {
 #ifdef OP_EQUALS_DEBUG
     std::cout << "kExprOperator::Equals" << std::endl;
 #endif
     auto left  = eval->expr;
     auto right = eval->expr2;
-    std::vector<size_t> literal_sizes;
-    for (const auto& table: input_data->tables) {
+
+    std::vector<size_t> result_size;
+
+    for (int i = 0;i < input_data->table_names.size();i++) {
+        auto table = input_data->tables[i];
         if (table->columns.empty()) {
             return new tensor<char, CPU>({});
+        } else {
+            if (!tile_size.empty())
+                result_size.push_back(tile_size[i]);
+            else
+                result_size.push_back(table->columns[0]->data.size());
         }
-        literal_sizes.push_back(table->columns[0]->data.size());
     }
+
+    std::vector<size_t> result_offset(result_size.size(), 0);
+    if (!tile_start.empty()) result_offset = tile_start;
     
-    auto* result = new tensor<char, CPU>(literal_sizes);
+    auto* result = new tensor<char, CPU>(result_size);
     if (left->isLiteral() && right->isLiteral()) {
 #ifdef OP_EQUALS_DEBUG
         std::cout << "kExprOperator::Equals two literals" << std::endl;
@@ -153,7 +167,13 @@ tensor<char, CPU> * Ops::equality(FromResolver::ResolveResult *input_data, hsql:
             deleteValue(value, column_ptr->type);
 
             for (auto r: bucket) {
-                hyperplane_pos[table_index] = r;
+                if (r < result_offset[table_index] || r >= result_offset[table_index] + result_size[table_index]) {
+                    // we need to check if the index is in the current tile
+                    // if not, we skip it
+                    continue;
+                }
+
+                hyperplane_pos[table_index] = r - result_offset[table_index];
                 result->fill(1, hyperplane_pos, mask);
             }
 
@@ -177,7 +197,8 @@ tensor<char, CPU> * Ops::equality(FromResolver::ResolveResult *input_data, hsql:
 #ifdef OP_EQUALS_DEBUG
                 std::cout << "kExprOperator::Equals literal_val(str)=" << literal->name << std::endl;
 #endif
-                for (auto val: column_ptr->data) {
+                for (int i = result_offset[table_index]; i < result_offset[table_index] + result_size[table_index]; i++) {
+                    auto val = column_ptr->data[i];
                     if (strcmp(val.s->c_str(), literal->name) == 0) {
                         result->fill(1, hyperplane_pos, mask);
                     }
@@ -188,7 +209,8 @@ tensor<char, CPU> * Ops::equality(FromResolver::ResolveResult *input_data, hsql:
 #ifdef OP_EQUALS_DEBUG
                 std::cout << "kExprOperator::Equals literal_val(int)=" << literal->ival << std::endl;
 #endif
-                for (auto val: column_ptr->data) {
+                for (int i = result_offset[table_index]; i < result_offset[table_index] + result_size[table_index]; i++) {
+                    auto val = column_ptr->data[i];
                     if (val.i == literal->ival) {
                         result->fill(1, hyperplane_pos, mask);
                     }
@@ -199,7 +221,8 @@ tensor<char, CPU> * Ops::equality(FromResolver::ResolveResult *input_data, hsql:
 #ifdef OP_EQUALS_DEBUG
                 std::cout << "kExprOperator::Equals literal_val(float)=" << literal->fval << std::endl;
 #endif
-                for (auto val: column_ptr->data) {
+                for (int i = result_offset[table_index]; i < result_offset[table_index] + result_size[table_index]; i++) {
+                    auto val = column_ptr->data[i];
                     if (val.d == literal->fval) {
                         result->fill(1, hyperplane_pos, mask);
                     }
@@ -321,11 +344,15 @@ tensor<char, CPU> * Ops::equality(FromResolver::ResolveResult *input_data, hsql:
         other_index = table_index_r;
     }
 
-    for (int i = 0;i < other->data.size();i++) {
+    for (int i = result_offset[other_index];i < result_offset[other_index] + result_size[other_index];i++) {
         auto matches = hashed->hashSearch(other->data[i]);
-        hyperplane_pos[other_index] = i;
+        hyperplane_pos[other_index] = i - result_offset[other_index];
         for (auto match: matches) {
-            hyperplane_pos[hashed_index] = match;
+            if (match < result_offset[hashed_index] || match >= result_offset[hashed_index] + result_size[hashed_index]) {
+                continue;
+            }
+
+            hyperplane_pos[hashed_index] = match - result_offset[hashed_index];
             result->fill(1, hyperplane_pos, mask);
         }
     }

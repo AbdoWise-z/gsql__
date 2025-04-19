@@ -10,27 +10,32 @@
 #include "ops/logical_or.hpp"
 #include "query/errors.hpp"
 
-#define FILTER_DEBUG
+// #define FILTER_DEBUG
 
 tensor<char, CPU>* FilterApplier::apply(
         FromResolver::ResolveResult *input_data,
         hsql::Expr *eval,
-        hsql::LimitDescription *limit
+        hsql::LimitDescription *limit,
+        const std::vector<size_t>& tile_start,
+        const std::vector<size_t>& tile_size
     ) {
 
-    if (eval == nullptr) { // pass all
-        std::vector<size_t> literal_sizes;
+    std::vector<size_t> result_size;
 
-        for (int i = 0;i < input_data->table_names.size();i++) {
-            auto table = input_data->tables[i];
-            if (table->columns.empty()) {
-                return new tensor<char, CPU>({});
-            } else {
-                literal_sizes.push_back(table->columns[0]->data.size());
-            }
+    for (int i = 0;i < input_data->table_names.size();i++) {
+        auto table = input_data->tables[i];
+        if (table->columns.empty()) {
+            return new tensor<char, CPU>({});
+        } else {
+            if (!tile_size.empty())
+                result_size.push_back(tile_size[i]);
+            else
+                result_size.push_back(table->columns[0]->data.size());
         }
+    }
 
-        auto* result = new tensor<char, CPU>(literal_sizes);
+    if (eval == nullptr) { // pass all
+        auto* result = new tensor<char, CPU>(result_size);
         result->setAll(1);
         return result;
     }
@@ -43,28 +48,28 @@ tensor<char, CPU>* FilterApplier::apply(
         std::cout << "hsql::ExprType::kExprOperator" << op << std::endl;
 #endif
         if (op == hsql::kOpAnd) {
-            return Ops::logical_and(input_data, eval, limit);
+            return Ops::logical_and(input_data, eval, limit, tile_start, tile_size);
         }
 
         if (op == hsql::kOpOr) {
-            return Ops::logical_or(input_data, eval, limit);
+            return Ops::logical_or(input_data, eval, limit, tile_start, tile_size);
         }
 
         if (op == hsql::kOpEquals) {
-            return Ops::equality(input_data, eval, limit);
+            return Ops::equality(input_data, eval, limit, tile_start, tile_size);
         }
 
         if (op == hsql::kOpGreater) {
-            return Ops::greater_than(input_data, eval->expr, eval->expr2, limit);
+            return Ops::greater_than(input_data, eval->expr, eval->expr2, limit, tile_start, tile_size);
         }
 
         if (op == hsql::kOpLess) {
-            return Ops::greater_than(input_data, eval->expr2, eval->expr, limit);
+            return Ops::greater_than(input_data, eval->expr2, eval->expr, limit, tile_start, tile_size);
         }
 
         if (op == hsql::kOpGreaterEq) {
-            auto t1 = Ops::greater_than(input_data, eval->expr, eval->expr2, limit);
-            auto t2 = Ops::equality(input_data, eval, limit);
+            auto t1 = Ops::greater_than(input_data, eval->expr, eval->expr2, limit, tile_start, tile_size);
+            auto t2 = Ops::equality(input_data, eval, limit, tile_start, tile_size);
             auto result = new tensor(*t1 || *t2);
             delete t1;
             delete t2;
@@ -72,8 +77,8 @@ tensor<char, CPU>* FilterApplier::apply(
         }
 
         if (op == hsql::kOpLessEq) {
-            auto t1 = Ops::greater_than(input_data, eval->expr2, eval->expr, limit);
-            auto t2 = Ops::equality(input_data, eval, limit);
+            auto t1 = Ops::greater_than(input_data, eval->expr2, eval->expr, limit, tile_start, tile_size);
+            auto t2 = Ops::equality(input_data, eval, limit, tile_start, tile_size);
             auto result = new tensor(*t1 || *t2);
             delete t1;
             delete t2;
@@ -81,7 +86,7 @@ tensor<char, CPU>* FilterApplier::apply(
         }
 
         if (op == hsql::kOpNotEquals) {
-            auto t2 = Ops::equality(input_data, eval, limit);
+            auto t2 = Ops::equality(input_data, eval, limit, tile_start, tile_size);
             auto result = new tensor(!*t2);
             delete t2;
             return result;
@@ -92,35 +97,16 @@ tensor<char, CPU>* FilterApplier::apply(
 #ifdef FILTER_DEBUG
         std::cout << "hsql::ExprType::kExprLiteralString" << std::endl;
 #endif
-        std::vector<size_t> literal_sizes;
 
-        for (const auto& table: input_data->tables) {
-            if (table->columns.empty()) {
-                return new tensor<char, CPU>({});
-            } else {
-                literal_sizes.push_back(table->columns[0]->data.size());
-            }
-        }
-
-        auto* result = new tensor<char, CPU>(literal_sizes);
+        auto* result = new tensor<char, CPU>(result_size);
         result->setAll(strlen(eval->name) > 0 ? 1 : 0);
         return result;
     } else if (expr_type == hsql::ExprType::kExprLiteralInt) {
 #ifdef FILTER_DEBUG
         std::cout << "hsql::ExprType::kExprLiteralInt" << std::endl;
 #endif
-        std::vector<size_t> literal_sizes;
 
-        for (const auto& table: input_data->tables) {
-            if (table->columns.empty()) {
-                return new tensor<char, CPU>({});
-            } else {
-                literal_sizes.push_back(table->columns[0]->data.size());
-            }
-        }
-
-
-        auto* result = new tensor<char, CPU>(literal_sizes);
+        auto* result = new tensor<char, CPU>(result_size);
         result->setAll(eval->ival > 0 ? 1 : 0);
         return result;
     } else if (expr_type == hsql::ExprType::kExprLiteralFloat) {
@@ -128,17 +114,7 @@ tensor<char, CPU>* FilterApplier::apply(
         std::cout << "hsql::ExprType::kExprLiteralFloat" << std::endl;
 #endif
 
-        std::vector<size_t> literal_sizes;
-
-        for (const auto& table: input_data->tables) {
-            if (table->columns.empty()) {
-                return new tensor<char, CPU>({});
-            } else {
-                literal_sizes.push_back(table->columns[0]->data.size());
-            }
-        }
-
-        auto* result = new tensor<char, CPU>(literal_sizes);
+        auto* result = new tensor<char, CPU>(result_size);
         result->setAll(eval->fval > 0 ? 1 : 0);
         return result;
     } else {
