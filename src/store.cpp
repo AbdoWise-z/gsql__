@@ -29,6 +29,12 @@ namespace Cfg {
         // x / z = a / c -> x = a / c * z
         //                  y = b / c * z
         // a / c * b / c * z^3 = maxTensorElements
+        // get z then every one else.
+
+        // Idea:
+        //   moving on the dim with the higher fraction will yield
+        //   the minimum amount of tiles.
+        // reasoning: it was shown to me in a dream
 
         long double _m = 1;
         for (int i = 0;i < inputSize.size() - 1;i++) {
@@ -36,7 +42,7 @@ namespace Cfg {
         }
 
         std::vector<size_t> result(inputSize.size(), 0);
-        long double _f = maxTensorElements / _m;
+        const long double _f = maxTensorElements / _m;
         result[inputSize.size() - 1] = static_cast<int>(ceil(pow(_f, 1.0f / inputSize.size())));
 
         for (int i = 0;i < inputSize.size() - 1;i++) {
