@@ -128,10 +128,10 @@ public:
         return data;
     }
 
-    virtual tensor<T, GPU> toGPU() {
+    virtual tensor<T, Device::GPU> toGPU() {
         T* gpuData = static_cast<T *>(cu::malloc(sizeof(T) * std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<>())));
         cu::toDevice(data, gpuData, sizeof(T) * std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<>()));
-        return tensor<T, GPU>(gpuData, shape);
+        return tensor<T, Device::GPU>(gpuData, shape);
     }
 
     virtual size_t totalSize() {

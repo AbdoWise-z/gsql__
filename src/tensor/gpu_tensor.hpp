@@ -78,8 +78,6 @@ public:
         cu::free(data);
         data = nullptr;
     }
-
-
 };
 
 
