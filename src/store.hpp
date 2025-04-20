@@ -49,6 +49,10 @@ namespace Cfg {
 
     extern size_t maxTensorElements;
 
+    extern size_t BlockDimX;
+    extern size_t BlockDimY;
+    extern size_t BlockDimZ;
+
     std::vector<size_t> getTileSizeFor(const std::vector<size_t>& inputSize);
 }
 

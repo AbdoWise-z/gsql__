@@ -94,10 +94,11 @@ table* SelectExecutor::GPU::Execute(hsql::SQLStatement *statement) {
             tileSize
             );
 
+        auto cpu_version = intermediate->toCPU();
         if (result.result == nullptr) {
-            result = ConstructTable(intermediate, &query_input);
+            result = ConstructTable(&cpu_version, tileSize, &query_input);
         } else {
-            AppendTable(intermediate, &query_input, tile, result.result);
+            AppendTable(&cpu_version, tileSize, &query_input, tile, result.result);
         }
 
 
@@ -236,9 +237,10 @@ table* SelectExecutor::GPU::Execute(hsql::SQLStatement *statement) {
 
 SelectExecutor::GPU::ConstructionResult SelectExecutor::GPU::ConstructTable(
     tensor<char, Device::CPU>* intermediate,
+    const std::vector<size_t>& tileSize,
     const FromResolver::GPU::ResolveResult* input
     ) {
-    size_t resultSize = intermediate->totalSize();
+    size_t resultSize = std::accumulate(tileSize.begin(), tileSize.end(), 1, std::multiplies<size_t>());
 
     // ReSharper disable once CppDFAMemoryLeak
     auto result = new table();
@@ -255,10 +257,10 @@ SelectExecutor::GPU::ConstructionResult SelectExecutor::GPU::ConstructTable(
         }
     }
 
-
+    auto iter_size = intermediate->totalSize();
     for (size_t i = 0; i < resultSize; i++) {
-        if ((*intermediate)[i]) {
-            auto tuple_index = intermediate->unmap(i);
+        if ((*intermediate)[i % iter_size]) {
+            auto tuple_index = ::unmap(tileSize, i);
 
             bool _in_bound = true;
             for (int m = 0;m < input->table_names.size();m++) {
@@ -289,6 +291,7 @@ SelectExecutor::GPU::ConstructionResult SelectExecutor::GPU::ConstructTable(
 
 void SelectExecutor::GPU::AppendTable(
     tensor<char, Device::CPU> *intermediate,
+    const std::vector<size_t>& tileSize,
     const FromResolver::GPU::ResolveResult *input,
     const std::vector<size_t> &offset,
     const table *result
@@ -296,10 +299,14 @@ void SelectExecutor::GPU::AppendTable(
 
     std::vector<size_t> pos(offset.size(), 0);
 
-    for (size_t i = 0; i < intermediate->totalSize(); i++) {
-        if ((*intermediate)[i]) {
+    size_t resultSize = std::accumulate(tileSize.begin(), tileSize.end(), 1, std::multiplies<size_t>());
+    auto iter_size = intermediate->totalSize();
 
-            auto tuple_index = intermediate->unmap(i);
+    for (size_t i = 0; i < resultSize; i++) {
+        if ((*intermediate)[i % iter_size]) {
+
+            auto tuple_index = ::unmap(tileSize, i);
+
             for (int j = 0;j < pos.size();j++) {
                 pos[j] = offset[j] + tuple_index[j];
             }

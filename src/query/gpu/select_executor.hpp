@@ -22,11 +22,13 @@ namespace SelectExecutor::GPU {
 
     ConstructionResult ConstructTable(
        tensor<char, Device::CPU>* intermediate,
+       const std::vector<size_t>& tileSize,
        const FromResolver::GPU::ResolveResult* input
        );
 
     void AppendTable(
        tensor<char, Device::CPU>* intermediate,
+       const std::vector<size_t>& tileSize,
        const FromResolver::GPU::ResolveResult* input,
        const std::vector<size_t> &offset,
        const table* result

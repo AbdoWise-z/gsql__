@@ -14,6 +14,7 @@
 #include "store.hpp"
 #include "editor/NanoEditor.h"
 #include "query/cpu_executor.hpp"
+#include "query/gpu_executor.hpp"
 #include "utils/string_utils.hpp"
 
 namespace fs = std::filesystem;
@@ -265,7 +266,7 @@ void sql(std::vector<std::string> params) {
     hsql::SQLParserResult parser_result;
     hsql::SQLParser::parse(query, &parser_result);
     try {
-        auto r_vec = time_it(CPUExecutor::executeQuery(parser_result));
+        auto r_vec = time_it(GPUExecutor::executeQuery(parser_result));
         for (auto t: r_vec) {
             std::cout << "Result: " << std::endl;
             std::cout << table::details(t) << std::endl;

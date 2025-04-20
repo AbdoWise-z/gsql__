@@ -101,6 +101,7 @@ FromResolver::CPU::ResolveResult FromResolver::CPU::resolve(hsql::TableRef * ref
             }
         }
     } else if (ref->type == hsql::kTableJoin) {
+        //fixme: Joins with tiling needs a rework.
         auto join = ref->join;
 
         auto left = FromResolver::CPU::resolve(join->left);

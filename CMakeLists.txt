@@ -99,16 +99,22 @@ set(SOURCES
         src/query/gpu/ops/equality.cpp
         src/query/gpu/ops/equality.hpp
 
-        src/query/gpu/ops/logical_and.cpp
-        src/query/gpu/ops/logical_and.hpp
-        src/query/gpu/ops/logical_or.cpp
-        src/query/gpu/ops/logical_or.hpp
-        src/query/gpu/ops/greater_than.cpp
-        src/query/gpu/ops/greater_than.hpp
+#        src/query/gpu/ops/logical_and.cpp
+#        src/query/gpu/ops/logical_and.hpp
+#        src/query/gpu/ops/logical_or.cpp
+#        src/query/gpu/ops/logical_or.hpp
+#        src/query/gpu/ops/greater_than.cpp
+#        src/query/gpu/ops/greater_than.hpp
         src/query/gpu/agg/sum_avg_count.cpp
         src/query/gpu/agg/sum_avg_count.hpp
         src/query/gpu/agg/max_min.cpp
         src/query/gpu/agg/max_min.hpp
+
+        src/query/gpu/gpu_function_interface.cu
+        src/query/gpu/gpu_function_interface.cuh
+
+        src/query/gpu/kernels/tensor_kernels.cu
+        src/query/gpu/kernels/tensor_kernels.cuh
 )
 
 # Create executable
@@ -121,6 +127,10 @@ target_link_libraries(gsql__ PUBLIC sqlparser)
 set_source_files_properties(
         src/utils/memory.cu
         src/utils/memory.cu
+        src/query/gpu/gpu_function_interface.cu
+        src/query/gpu/gpu_function_interface.cuh
+        src/query/gpu/kernels/tensor_kernels.cu
+        src/query/gpu/kernels/tensor_kernels.cuh
         PROPERTIES LANGUAGE CUDA
 )
 
@@ -135,6 +145,55 @@ set_source_files_properties(
 add_executable(
         Sandbox
         src/Sandbox.cpp
+
+        src/utils/clp.hpp
+        src/tensor/tensor.hpp
+        src/tensor/cpu_tensor.hpp
+        src/tensor/gpu_tensor.hpp
+
+        src/utils/memory.cu
+        src/utils/memory.cuh
+
+        src/db/column.cpp
+        src/db/column.hpp
+
+        src/utils/murmur_hash3.cpp
+        src/utils/murmur_hash3.hpp
+
+        src/db/typing.hpp
+
+        src/db/value_helper.cpp
+        src/db/value_helper.hpp
+
+        src/db/table.cpp
+        src/db/table.hpp
+
+        src/db/db_helper.cpp
+        src/db/db_helper.hpp
+
+        src/cli/cli.cpp
+        src/cli/cli.hpp
+
+        src/utils/konsol.cpp
+        src/utils/konsol.hpp
+
+        src/query/errors.cpp
+        src/query/errors.hpp
+
+        src/store.cpp
+        src/store.hpp
+
+        src/utils/string_utils.cpp
+        src/utils/string_utils.hpp
+
+        src/editor/NanoEditor.cpp
+        src/editor/NanoEditor.h
+
+        src/query/gpu/gpu_function_interface.cu
+        src/query/gpu/gpu_function_interface.cuh
+
+        src/query/gpu/kernels/tensor_kernels.cu
+        src/query/gpu/kernels/tensor_kernels.cuh
 )
 
 target_link_libraries(Sandbox PUBLIC sqlparser)

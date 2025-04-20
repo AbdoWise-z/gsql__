@@ -12,6 +12,10 @@ namespace Cfg {
 
     size_t maxTensorElements = 512 * 512 * 512;
 
+    size_t BlockDimX = 32 * 4;
+    size_t BlockDimY = 32 * 4;
+    size_t BlockDimZ = 32 * 4;
+
     std::vector<size_t> getTileSizeFor(const std::vector<size_t>& inputSize) {
         std::vector<long double> factors;
         uint64_t totalSize = 0;

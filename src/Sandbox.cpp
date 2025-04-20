@@ -5,14 +5,23 @@
 
 #include <vector>
 
-#include "store.hpp"
-#include "query/cpu/select_executor.hpp"
+#include "query/gpu/gpu_function_interface.cuh"
+#include "tensor/tensor.hpp"
 
 int main() {
-    std::vector<size_t> test_input = {1024, 1024, 1024 * 14};
-    auto result = SelectExecutor::Schedule(test_input);
-    for (auto i : result) {
-        //
+    auto t = new tensor<char, Device::GPU>({10, 10});
+
+    for (size_t i = 0; i < 10; i += 1) {
+        char c = 'a';
+        if (i % 2 == 0) c = 'b';
+        GFI::fill(t, c, {i, 0}, {0, 1});
     }
-    return 0;
+
+    auto cpu = t->toCPU();
+    for (size_t i = 0;i < 10;i++) {
+        for (size_t j = 0;j < 10;j++) {
+            std::cout << cpu[{i, j}] << " ";
+        }
+        std::cout << std::endl;
+    }
 }

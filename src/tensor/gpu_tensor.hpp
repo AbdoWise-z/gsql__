@@ -7,13 +7,17 @@
 
 #include "utils/memory.cuh"
 
+namespace GFI {
+    void fill(tensor<char, Device::GPU>* output_data, char value);
+    void fill(tensor<char, Device::GPU>* output_data, char value, 
+             std::vector<size_t> position, std::vector<size_t> mask);
+}
+
 template<typename T>
-class tensor<T, GPU> {
-private:
+class tensor<T, Device::GPU> {
+public:
     T* data;
     std::vector<size_t> shape;
-
-public:
 
     explicit tensor(const std::vector<size_t>& shape) : shape(shape) {
         //std::cout << "GPU create from shape\n";
@@ -39,6 +43,33 @@ public:
         return GPU;
     }
 
+    T set(const std::vector <size_t> &indices, T value) {
+        if (indices.size() != shape.size()) {
+            std::cout << indices.size() << " " << shape.size() << std::endl;
+            throw std::invalid_argument("Tensor::operator[]: indices size mismatch (!= shape)");
+        }
+
+        size_t index = 0;
+        size_t acc = 1;
+        for (size_t i = 0;i < shape.size();i++) {
+            index += indices[i] * acc;
+            acc *= shape[i];
+        }
+
+        return set(index, value);
+    }
+
+    T set(size_t index, T value) {
+        if (index >= totalSize()) {
+            throw std::invalid_argument("Tensor::operator[]: index out of range");
+        }
+
+        T ret;
+        cu::toHost(data + index * sizeof(T), &ret, sizeof(T));
+        cu::toDevice(&value, data + index * sizeof(T), sizeof(T));
+        return ret;
+    }
+
     T operator[](const std::vector <size_t> &indices) {
         if (indices.size() != shape.size()) {
             std::cout << indices.size() << " " << shape.size() << std::endl;
@@ -53,8 +84,7 @@ public:
         }
 
         T val;
-        cu::toHost(data, &val, sizeof(T));
-
+        cu::toHost(data + index * sizeof(T), &val, sizeof(T));
         return val;
     }
 
@@ -64,19 +94,46 @@ public:
         return this->operator[](indices);
     }
 
-    T* getData() {
-        return data;
-    }
-
     tensor<T, CPU> toCPU() {
         T* cpuData = static_cast<T *>(malloc(sizeof(T) * std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<>())));
         cu::toHost(data, cpuData, sizeof(T) * std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<>()));
         return tensor<T, CPU>(cpuData, shape);
     }
 
-    ~tensor() {
+    virtual ~tensor() {
         cu::free(data);
         data = nullptr;
+    }
+
+    virtual size_t totalSize() {
+        size_t acc = 1;
+        for (const size_t i : shape) {
+            acc *= i;
+        }
+
+        return acc;
+    }
+
+    virtual std::vector<size_t> unmap(const size_t i) {
+        std::vector<size_t> indices;
+        size_t remaining = i;
+        for (size_t dim : shape) {
+            indices.push_back(remaining % dim);
+            remaining = remaining / dim;
+        }
+        return indices;
+    }
+
+    virtual void setAll(T t) {
+        GFI::fill(this, t);
+    }
+
+    virtual void fill(T t, std::vector<uint64_t> pos, std::vector<size_t> dims) {
+        if (pos.size() != dims.size() || pos.size() != shape.size()) {
+            throw std::invalid_argument("fill: pos and dims size mismatch");
+        }
+
+        GFI::fill(this, t, pos, dims);
     }
 };
 

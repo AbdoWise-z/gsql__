@@ -8,6 +8,7 @@
 #include "utils/memory.cuh"
 #include <iostream>
 
+
 template<typename T>
 class tensor<T, Device::CPU> {
 private:
@@ -120,7 +121,7 @@ public:
 
     template<typename... Args>
     T& operator()(Args&&... args) {
-        const std::vector <int> indices = {std::forward<Args>(args)...};
+        const std::vector <size_t> indices = {std::forward<Args>(args)...};
         return this->operator[](indices);
     }
 

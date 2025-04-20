@@ -12,7 +12,7 @@
 
 
 namespace FilterApplier::GPU {
-     tensor<char, Device::CPU>* apply(
+     tensor<char, Device::GPU>* apply(
          FromResolver::GPU::ResolveResult *input_data,
          hsql::Expr* eval,                                       // the join / filter expression
          hsql::LimitDescription* limit,                          // max number of returned rows

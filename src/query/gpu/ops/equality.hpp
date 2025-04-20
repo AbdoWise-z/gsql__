@@ -12,7 +12,7 @@
 
 
 namespace Ops::GPU {
-    tensor<char, Device::CPU>* equality(
+    tensor<char, Device::GPU>* equality(
         FromResolver::GPU::ResolveResult *input_data,
         hsql::Expr *eval,
         hsql::LimitDescription *limit,

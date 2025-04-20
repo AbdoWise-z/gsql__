@@ -9,7 +9,7 @@
 
 // #define OP_EQUALS_DEBUG
 
-tensor<char, Device::CPU> * Ops::GPU::equality(
+tensor<char, Device::GPU> * Ops::GPU::equality(
     FromResolver::GPU::ResolveResult *input_data,
     hsql::Expr *eval,
     hsql::LimitDescription *limit,
@@ -26,7 +26,7 @@ tensor<char, Device::CPU> * Ops::GPU::equality(
     for (int i = 0;i < input_data->table_names.size();i++) {
         auto table = input_data->tables[i];
         if (table->columns.empty()) {
-            return new tensor<char, Device::CPU>({});
+            return new tensor<char, Device::GPU>({});
         } else {
             if (!tile_size.empty())
                 result_size.push_back(tile_size[i]);
@@ -37,8 +37,7 @@ tensor<char, Device::CPU> * Ops::GPU::equality(
 
     std::vector<size_t> result_offset(result_size.size(), 0);
     if (!tile_start.empty()) result_offset = tile_start;
-    
-    auto* result = new tensor<char, Device::CPU>(result_size);
+
     if (left->isLiteral() && right->isLiteral()) {
 #ifdef OP_EQUALS_DEBUG
         std::cout << "kExprOperator::Equals two literals" << std::endl;
@@ -47,7 +46,8 @@ tensor<char, Device::CPU> * Ops::GPU::equality(
         if (left->type != right->type) {
             // we know they can't be equal if they can't be the same type (unless they are float and int)
             // fixme: handle case where they are float or int
-            result->setAll(0);
+            auto* result = new tensor<char, Device::GPU>({1});
+            result->set(0, 0);
 #ifdef OP_EQUALS_DEBUG
             std::cout << "kExprOperator::Equals type mismatch" << std::endl;
 #endif
@@ -59,7 +59,8 @@ tensor<char, Device::CPU> * Ops::GPU::equality(
             std::cout << "kExprOperator::Equals String, left=" << left->name << " & right=" << right->name << std::endl;
 #endif
             auto r = strcmp(left->name, right->name);
-            result->setAll(r == 0 ? 1 : 0);
+            auto* result = new tensor<char, Device::GPU>({1});
+            result->set(0, r == 0 ? 1 : 0);
             return result;
         }
 
@@ -67,7 +68,8 @@ tensor<char, Device::CPU> * Ops::GPU::equality(
 #ifdef OP_EQUALS_DEBUG
             std::cout << "kExprOperator::Equals Integer, left=" << left->ival << " & right=" << right->ival << std::endl;
 #endif
-            result->setAll(left->ival == right->ival);
+            auto* result = new tensor<char, Device::GPU>({1});
+            result->set(0, left->ival == right->ival);
             return result;
         }
 
@@ -75,13 +77,15 @@ tensor<char, Device::CPU> * Ops::GPU::equality(
 #ifdef OP_EQUALS_DEBUG
             std::cout << "kExprOperator::Equals Float, left=" << left->fval << " & right=" << right->fval << std::endl;
 #endif
-            result->setAll(left->fval == right->fval);
+            auto* result = new tensor<char, Device::GPU>({1});
+            result->set(0, left->fval == right->fval);
             return result;
         }
 
         throw UnsupportedLiteralError();
     }
 
+    auto* result = new tensor<char, Device::GPU>(result_size);
     if (left->isLiteral() || right->isLiteral()) {
 #ifdef OP_EQUALS_DEBUG
         std::cout << "kExprOperator::Equals one literal" << std::endl;
@@ -153,6 +157,7 @@ tensor<char, Device::CPU> * Ops::GPU::equality(
                 }
             }
 
+            auto* result = new tensor<char, Device::GPU>(result_size);
             result->setAll(0);
 
             tval value;
