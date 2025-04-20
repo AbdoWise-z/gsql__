@@ -51,8 +51,8 @@ set(SOURCES
         src/query/cpu_executor.cpp
         src/query/cpu_executor.hpp
 
-#        src/query/gpu_executor.cpp
-#        src/query/gpu_executor.hpp
+        src/query/gpu_executor.cpp
+        src/query/gpu_executor.hpp
 
         src/query/errors.cpp
         src/query/errors.hpp
@@ -89,26 +89,26 @@ set(SOURCES
         src/query/cpu/agg/max_min.hpp
 
         # GPU stuff
-#        src/query/gpu/from_resolver.cpp
-#        src/query/gpu/from_resolver.hpp
-#        src/query/gpu/select_executor.cpp
-#        src/query/gpu/select_executor.hpp
-#        src/query/gpu/filter_applier.cpp
-#        src/query/gpu/filter_applier.hpp
-#
-#        src/query/gpu/ops/equality.cpp
-#        src/query/gpu/ops/equality.hpp
-#
-#        src/query/gpu/ops/logical_and.cpp
-#        src/query/gpu/ops/logical_and.hpp
-#        src/query/gpu/ops/logical_or.cpp
-#        src/query/gpu/ops/logical_or.hpp
-#        src/query/gpu/ops/greater_than.cpp
-#        src/query/gpu/ops/greater_than.hpp
-#        src/query/gpu/agg/sum_avg_count.cpp
-#        src/query/gpu/agg/sum_avg_count.hpp
-#        src/query/gpu/agg/max_min.cpp
-#        src/query/gpu/agg/max_min.hpp
+        src/query/gpu/from_resolver.cpp
+        src/query/gpu/from_resolver.hpp
+        src/query/gpu/select_executor.cpp
+        src/query/gpu/select_executor.hpp
+        src/query/gpu/filter_applier.cpp
+        src/query/gpu/filter_applier.hpp
+
+        src/query/gpu/ops/equality.cpp
+        src/query/gpu/ops/equality.hpp
+
+        src/query/gpu/ops/logical_and.cpp
+        src/query/gpu/ops/logical_and.hpp
+        src/query/gpu/ops/logical_or.cpp
+        src/query/gpu/ops/logical_or.hpp
+        src/query/gpu/ops/greater_than.cpp
+        src/query/gpu/ops/greater_than.hpp
+        src/query/gpu/agg/sum_avg_count.cpp
+        src/query/gpu/agg/sum_avg_count.hpp
+        src/query/gpu/agg/max_min.cpp
+        src/query/gpu/agg/max_min.hpp
 )
 
 # Create executable
