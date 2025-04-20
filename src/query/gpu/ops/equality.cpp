@@ -6,6 +6,7 @@
 
 #include "store.hpp"
 #include "query/errors.hpp"
+#include "query/gpu/gpu_function_interface.cuh"
 
 // #define OP_EQUALS_DEBUG
 
@@ -86,6 +87,7 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
     }
 
     auto* result = new tensor<char, Device::GPU>(result_size);
+
     if (left->isLiteral() || right->isLiteral()) {
 #ifdef OP_EQUALS_DEBUG
         std::cout << "kExprOperator::Equals one literal" << std::endl;
@@ -157,7 +159,6 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
                 }
             }
 
-            auto* result = new tensor<char, Device::GPU>(result_size);
             result->setAll(0);
 
             tval value;
@@ -349,18 +350,29 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
         other_index = table_index_r;
     }
 
-    for (int i = result_offset[other_index];i < result_offset[other_index] + result_size[other_index];i++) {
-        auto matches = hashed->hashSearch(other->data[i]);
-        hyperplane_pos[other_index] = i - result_offset[other_index];
-        for (auto match: matches) {
-            if (match < result_offset[hashed_index] || match >= result_offset[hashed_index] + result_size[hashed_index]) {
-                continue;
-            }
+    GFI::equality(
+        result,
+        other,
+        hashed,
+        tile_start,
+        tile_size,
+        other_index,
+        hashed_index,
+        mask
+    );
 
-            hyperplane_pos[hashed_index] = match - result_offset[hashed_index];
-            result->fill(1, hyperplane_pos, mask);
-        }
-    }
+    // for (int i = result_offset[other_index];i < result_offset[other_index] + result_size[other_index];i++) {
+    //     auto matches = hashed->hashSearch(other->data[i]);
+    //     hyperplane_pos[other_index] = i - result_offset[other_index];
+    //     for (auto match: matches) {
+    //         if (match < result_offset[hashed_index] || match >= result_offset[hashed_index] + result_size[hashed_index]) {
+    //             continue;
+    //         }
+    //
+    //         hyperplane_pos[hashed_index] = match - result_offset[hashed_index];
+    //         result->fill(1, hyperplane_pos, mask);
+    //     }
+    // }
 
     return result;
 }

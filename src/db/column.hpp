@@ -17,6 +17,7 @@ public:
 
     std::vector<size_t>              sorted;
     std::vector<std::vector<size_t>> hashed;
+    size_t hashExSize;
 
     void buildSortedIndexes ();
     void buildHashedIndexes (int ex_size);

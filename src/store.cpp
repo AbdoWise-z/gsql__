@@ -16,6 +16,10 @@ namespace Cfg {
     size_t BlockDimY = 32 * 4;
     size_t BlockDimZ = 32 * 4;
 
+    size_t maxGPUMemory = 1024 * 1024 * 1024; // 1 GB
+
+    size_t useAccelerator = 1;
+
     std::vector<size_t> getTileSizeFor(const std::vector<size_t>& inputSize) {
         std::vector<long double> factors;
         uint64_t totalSize = 0;

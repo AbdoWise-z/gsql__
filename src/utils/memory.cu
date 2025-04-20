@@ -4,10 +4,15 @@
 
 #include "memory.cuh"
 
+#include <stdexcept>
+
 
 void * cu::malloc(size_t size) {
     void* ptr;
-    cudaMalloc(&ptr, size);
+    auto err = cudaMalloc(&ptr, size);
+    if (err != cudaSuccess) {
+        throw std::runtime_error("CUDA malloc failed: " + std::string(cudaGetErrorString(err)));
+    }
     return ptr;
 }
 

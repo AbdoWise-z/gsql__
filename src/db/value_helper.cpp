@@ -4,7 +4,7 @@
 
 #include "value_helper.hpp"
 
-#include <c++/12/cstring>
+#include <string>
 
 
 int cmp(const tval& a, const tval& b, const DataType& t) {

@@ -53,6 +53,10 @@ namespace Cfg {
     extern size_t BlockDimY;
     extern size_t BlockDimZ;
 
+    extern size_t maxGPUMemory;
+
+    extern size_t useAccelerator;
+
     std::vector<size_t> getTileSizeFor(const std::vector<size_t>& inputSize);
 }
 

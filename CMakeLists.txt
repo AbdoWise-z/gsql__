@@ -5,8 +5,9 @@ project(gsql__ LANGUAGES CXX CUDA)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CUDA_STANDARD 20)
 
-# Optional: Prevent host compiler warnings on CUDA code
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr")
+
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -rdc=true -arch=sm_52")
+set(CMAKE_CUDA_ARCHITECTURES 52)
 
 # Include and link directories
 include_directories(libs)
@@ -16,6 +17,7 @@ link_directories(libs/hsql)
 # Source files
 set(SOURCES
         src/main.cpp
+        src/constants.hpp
 
         src/utils/clp.hpp
         src/tensor/tensor.hpp
@@ -27,6 +29,9 @@ set(SOURCES
 
         src/db/column.cpp
         src/db/column.hpp
+
+        src/utils/murmur_hash3_cuda.cu
+        src/utils/murmur_hash3_cuda.cuh
 
         src/utils/murmur_hash3.cpp
         src/utils/murmur_hash3.hpp
@@ -113,24 +118,48 @@ set(SOURCES
         src/query/gpu/gpu_function_interface.cu
         src/query/gpu/gpu_function_interface.cuh
 
+        src/query/gpu/gpu_buffer_pool.cu
+        src/query/gpu/gpu_buffer_pool.cuh
+
         src/query/gpu/kernels/tensor_kernels.cu
         src/query/gpu/kernels/tensor_kernels.cuh
+
+        src/query/gpu/kernels/equality_kernel.cu
+        src/query/gpu/kernels/equality_kernel.cuh
 )
 
 # Create executable
 add_executable(gsql__ ${SOURCES})
 
+set_target_properties(gsql__ PROPERTIES
+        LINKER_LANGUAGE CUDA
+        CUDA_RESOLVE_DEVICE_SYMBOLS ON
+)
+
+
 # Link with external libraries
-target_link_libraries(gsql__ PUBLIC sqlparser)
+target_link_libraries(gsql__ PUBLIC
+        sqlparser
+)
 
 # Make sure CUDA files are compiled with the CUDA compiler
 set_source_files_properties(
         src/utils/memory.cu
         src/utils/memory.cu
+
+        src/utils/murmur_hash3_cuda.cu
+        src/utils/murmur_hash3_cuda.cuh
+
         src/query/gpu/gpu_function_interface.cu
         src/query/gpu/gpu_function_interface.cuh
+
         src/query/gpu/kernels/tensor_kernels.cu
         src/query/gpu/kernels/tensor_kernels.cuh
+
+        src/query/gpu/kernels/equality_kernel.cu
+        src/query/gpu/kernels/equality_kernel.cuh
+
+
         PROPERTIES LANGUAGE CUDA
 )
 
@@ -157,8 +186,8 @@ add_executable(
         src/db/column.cpp
         src/db/column.hpp
 
-        src/utils/murmur_hash3.cpp
-        src/utils/murmur_hash3.hpp
+        src/utils/murmur_hash3_cuda.cu
+        src/utils/murmur_hash3_cuda.cuh
 
         src/db/typing.hpp
 

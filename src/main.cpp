@@ -251,6 +251,16 @@ void cfg(std::vector<std::string> params) {
         }
     }
 
+    if (params[0] == "Acc") {
+        try {
+            Cfg::useAccelerator = std::stoi(params[1]);
+            std::cout << "Updated: " << color("Cfg::useAccelerator", CYAN_FG) << " = " << Cfg::useAccelerator << std::endl;
+            return;
+        } catch (std::exception& e) {
+            std::cout << "Error modifying configuration: " << e.what() << std::endl;
+        }
+    }
+
     std::cout << "Unknown param." << std::endl;
 }
 
@@ -266,7 +276,12 @@ void sql(std::vector<std::string> params) {
     hsql::SQLParserResult parser_result;
     hsql::SQLParser::parse(query, &parser_result);
     try {
-        auto r_vec = time_it(GPUExecutor::executeQuery(parser_result));
+        std::vector<table*> r_vec;
+        if (Cfg::useAccelerator) {
+            r_vec = time_it(GPUExecutor::executeQuery(parser_result));
+        } else {
+            r_vec = time_it(CPUExecutor::executeQuery(parser_result));
+        }
         for (auto t: r_vec) {
             std::cout << "Result: " << std::endl;
             std::cout << table::details(t) << std::endl;

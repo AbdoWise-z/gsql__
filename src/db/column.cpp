@@ -21,6 +21,8 @@ void column::buildSortedIndexes() {
 void column::buildHashedIndexes(int ex_size) {
     hashed.clear();
 
+    hashExSize = ex_size;
+
     for (int i = 0;i < data.size(); i++) { // at most as big as the data size will be
         hashed.emplace_back();
     }

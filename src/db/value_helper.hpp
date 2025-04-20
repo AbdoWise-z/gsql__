@@ -12,7 +12,7 @@
 #include "typing.hpp"
 #include "utils/murmur_hash3.hpp"
 
-#define SEED 2147483647  // a prime number from the boi Euler :)    M31
+#include "constants.hpp"
 
 union tval {
     std::string* s;
