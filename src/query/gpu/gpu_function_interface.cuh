@@ -29,6 +29,21 @@ namespace GFI {
         std::vector<size_t> mask
     );
 
+    void inequality(
+        tensor<char, Device::GPU> *result,
+        column *col_1,
+        column *col_2,
+
+        std::vector<size_t> tileOffset,
+        std::vector<size_t> tileSize,
+
+        size_t table_1_index,
+        size_t table_2_index,
+
+        std::vector<size_t> mask,
+        column::SortedSearchType operation
+    );
+
     void logical_and(const tensor<char, Device::GPU> *a, const tensor<char, Device::GPU> *b, tensor<char, Device::GPU> *out);
     void logical_or (const tensor<char, Device::GPU> *a, const tensor<char, Device::GPU> *b, tensor<char, Device::GPU> *out);
     void logical_not(const tensor<char, Device::GPU> *a, tensor<char, Device::GPU> *out);

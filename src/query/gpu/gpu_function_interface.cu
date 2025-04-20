@@ -7,6 +7,7 @@
 #include "gpu_buffer_pool.cuh"
 #include "store.hpp"
 #include "kernels/equality_kernel.cuh"
+#include "kernels/inequality_kernel.cuh"
 #include "kernels/tensor_kernels.cuh"
 #include "utils/murmur_hash3_cuda.cuh"
 
@@ -69,6 +70,20 @@ static auto columnPoolAllocator = [] (void* ptr, BufferAllocator alloc) {
     return std::make_pair(size, gpuPtr);
 };
 
+static auto columnIndexPoolAllocator = [] (void* ptr, BufferAllocator alloc) {
+    auto col = static_cast<column*>(ptr);
+    auto index_table = col->sorted;
+    auto size = index_table.size();
+    void* gpuPtr = 0;
+    if (index_table.empty()) {
+        throw std::runtime_error("Empty index table");
+    }
+
+    gpuPtr = alloc(size * sizeof(size_t));
+    cu::toDevice(index_table.data(), gpuPtr, size * sizeof(size_t));
+
+    return std::make_pair(size * sizeof(size_t), gpuPtr);
+};
 
 static auto columnHashPoolAllocator = [] (void* ptr, BufferAllocator alloc) {
     auto col = static_cast<column*>(ptr);
@@ -151,6 +166,71 @@ void GFI::equality(
                 _tileOffset
                 );
             break;
+        default:
+            throw std::runtime_error("Unsupported column type");
+    }
+
+    TensorKernel::extend_plain_kernel<<<grid, dim3(Cfg::BlockDimX)>>>(result->data, result->totalSize(), _mask, _tileSize, mask.size());
+
+    cu::free(_mask);
+    cu::free(_tileOffset);
+    cu::free(_tileSize);
+}
+
+void GFI::inequality(
+        tensor<char, Device::GPU> *result,
+
+        column *col_1,
+        column *col_2,
+
+        std::vector<size_t> tileOffset,
+        std::vector<size_t> tileSize,
+
+        size_t table_1_index,
+        size_t table_2_index,
+
+        std::vector<size_t> mask,
+
+        column::SortedSearchType operation
+    ) {
+
+    auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
+    auto _col_2 = pool.getBufferOrCreate(static_cast<void*>(col_2), static_cast<void*>(col_2), columnPoolAllocator);
+
+    auto _index_table = pool.getBufferOrCreate(static_cast<void*>(&(col_2->sorted)), static_cast<void*>(col_2), columnIndexPoolAllocator);
+
+    auto _mask = static_cast<size_t*>(cu::vectorToDevice(mask));
+    auto _tileOffset = static_cast<size_t*>(cu::vectorToDevice(tileOffset));
+    auto _tileSize = static_cast<size_t*>(cu::vectorToDevice(tileSize));
+
+
+    const auto size = result->totalSize();
+    dim3 grid((size + Cfg::BlockDimX - 1) / (Cfg::BlockDimX));
+
+    switch (col_1->type) {
+        case INTEGER:
+            InequalityKernel::Inequality_kernel_int64_t<<<grid, dim3(Cfg::BlockDimX)>>>(
+                result->data,
+                result->totalSize(),
+                tileOffset.size(),
+
+                static_cast<int64_t*>(_col_1),
+                static_cast<int64_t*>(_col_2),
+                col_1->data.size(),
+                col_2->data.size(),
+
+                static_cast<size_t*>(_index_table),
+
+                _mask,
+                table_1_index,
+                table_2_index,
+
+                _tileSize,
+                _tileOffset,
+
+                operation
+                );
+        break;
         default:
             throw std::runtime_error("Unsupported column type");
     }

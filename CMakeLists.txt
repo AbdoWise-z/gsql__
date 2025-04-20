@@ -126,6 +126,9 @@ set(SOURCES
 
         src/query/gpu/kernels/equality_kernel.cu
         src/query/gpu/kernels/equality_kernel.cuh
+
+        src/query/gpu/kernels/inequality_kernel.cu
+        src/query/gpu/kernels/inequality_kernel.cuh
 )
 
 # Create executable
@@ -153,12 +156,17 @@ set_source_files_properties(
         src/query/gpu/gpu_function_interface.cu
         src/query/gpu/gpu_function_interface.cuh
 
+        src/query/gpu/gpu_buffer_pool.cu
+        src/query/gpu/gpu_buffer_pool.cuh
+
         src/query/gpu/kernels/tensor_kernels.cu
         src/query/gpu/kernels/tensor_kernels.cuh
 
         src/query/gpu/kernels/equality_kernel.cu
         src/query/gpu/kernels/equality_kernel.cuh
 
+        src/query/gpu/kernels/inequality_kernel.cu
+        src/query/gpu/kernels/inequality_kernel.cuh
 
         PROPERTIES LANGUAGE CUDA
 )

@@ -25,8 +25,8 @@
         const auto _ns_ = duration_cast<nanoseconds>(_time_it_duration_); \
         std::cout << #call << " Executed in: " \
                   << _sec_.count() << " seconds, " \
-                  << _ms_.count() << " ms, " \
-                  << _ns_.count() << " ns." << std::endl; \
+                  << _ms_.count() % 1000 << " ms, " \
+                  << _ns_.count() % 1000000 << " ns." << std::endl; \
     } else { \
         decltype(call) _time_it_result_ = call; \
         const auto _time_it_end_ = high_resolution_clock::now(); \
@@ -36,8 +36,8 @@
         const auto _ns_ = duration_cast<nanoseconds>(_time_it_duration_); \
         std::cout << #call << " Executed in: " \
                   << _sec_.count() << " seconds, " \
-                  << _ms_.count() << " ms, " \
-                  << _ns_.count() << " ns." << std::endl; \
+                  << _ms_.count() % 1000  << " ms, " \
+                  << _ns_.count() % 1000000 << " ns." << std::endl; \
         return _time_it_result_; \
     } \
 })()

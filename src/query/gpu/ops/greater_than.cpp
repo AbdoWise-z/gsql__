@@ -347,27 +347,39 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
     // now do the search
     auto sorted = column_ptr_r;
     auto other = column_ptr_l;
-    auto hashed_index = table_index_r;
+    auto sorted_index = table_index_r;
     auto other_index = table_index_l;
     if (!sorted->isSortIndexed()) {
         sorted = column_ptr_l;
         other = column_ptr_r;
-        hashed_index = table_index_l;
+        sorted_index = table_index_l;
         other_index = table_index_r;
     }
 
-    for (int i = result_offset[other_index];i < result_offset[other_index] + result_size[other_index];i++) {
-        auto matches = sorted->sortSearch(other->data[i], other_index == table_index_l ? column::SST_GT : column::SST_LT);
-        hyperplane_pos[other_index] = i - result_offset[other_index];
-        for (auto match: matches) {
-            if (match < result_offset[hashed_index] || match >= result_offset[hashed_index] + result_size[hashed_index]) {
-                continue;
-            }
+    GFI::inequality(
+        result,
+        other,
+        sorted,
+        tile_start,
+        tile_size,
+        other_index,
+        sorted_index,
+        mask,
+        other_index == table_index_l ? column::SST_GT : column::SST_LT
+    );
 
-            hyperplane_pos[hashed_index] = match;
-            result->fill(1, hyperplane_pos, mask);
-        }
-    }
+    // for (int i = result_offset[other_index];i < result_offset[other_index] + result_size[other_index];i++) {
+    //     auto matches = sorted->sortSearch(other->data[i], other_index == table_index_l ? column::SST_GT : column::SST_LT);
+    //     hyperplane_pos[other_index] = i - result_offset[other_index];
+    //     for (auto match: matches) {
+    //         if (match < result_offset[hashed_index] || match >= result_offset[hashed_index] + result_size[hashed_index]) {
+    //             continue;
+    //         }
+    //
+    //         hyperplane_pos[hashed_index] = match;
+    //         result->fill(1, hyperplane_pos, mask);
+    //     }
+    // }
 
     return result;
 }
