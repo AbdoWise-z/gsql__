@@ -28,6 +28,11 @@ namespace GFI {
 
         std::vector<size_t> mask
     );
+
+    void logical_and(const tensor<char, Device::GPU> *a, const tensor<char, Device::GPU> *b, tensor<char, Device::GPU> *out);
+    void logical_or (const tensor<char, Device::GPU> *a, const tensor<char, Device::GPU> *b, tensor<char, Device::GPU> *out);
+    void logical_not(const tensor<char, Device::GPU> *a, tensor<char, Device::GPU> *out);
+
 };
 
 

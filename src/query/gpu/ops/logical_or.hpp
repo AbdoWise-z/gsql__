@@ -10,7 +10,7 @@
 #include "tensor/tensor.hpp"
 
 namespace Ops::GPU {
-    tensor<char, Device::CPU>* logical_or(
+    tensor<char, Device::GPU>* logical_or(
         FromResolver::GPU::ResolveResult *input_data,
         const hsql::Expr *eval,
         hsql::LimitDescription *limit,

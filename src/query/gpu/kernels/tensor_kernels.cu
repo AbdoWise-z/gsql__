@@ -35,7 +35,7 @@ __global__ void TensorKernel::fill_kernel(char *output_data, size_t dataSize, ch
         output_data[idx] = value;
 }
 
-__device__ void TensorKernel::unmap(size_t *shape, size_t *pos, size_t index, size_t size) {
+__device__ __host__ void TensorKernel::unmap(size_t *shape, size_t *pos, size_t index, size_t size) {
     size_t remaining = index;
     for (int i = 0; i < size; ++i) {
         pos[i] = remaining % shape[i];
@@ -43,7 +43,7 @@ __device__ void TensorKernel::unmap(size_t *shape, size_t *pos, size_t index, si
     }
 }
 
-size_t TensorKernel::map(size_t *indices, size_t *shape, size_t size) {
+__device__ __host__ size_t TensorKernel::map(size_t *indices, size_t *shape, size_t size) {
     size_t index = 0;
     size_t acc = 1;
     for (size_t i = 0;i < size;i++) {
@@ -78,3 +78,26 @@ __global__ void TensorKernel::extend_plain_kernel(
 
     output_data[idx] = output_data[map(pos, shape, maskSize)];
 }
+
+__global__ void TensorKernel::logical_and(char *a, char *b, size_t size, char *out) {
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        out[idx] = a[idx] && b[idx];
+    }
+}
+
+__global__ void TensorKernel::logical_or(char *a, char *b, size_t size, char *out) {
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        out[idx] = a[idx] || b[idx];
+    }
+}
+
+__global__ void TensorKernel::logical_not(char *a, size_t size, char *out) {
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        out[idx] = !a[idx];
+    }
+}
+
+

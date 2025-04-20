@@ -7,7 +7,7 @@
 
 // #define OP_OR_DEBUG
 
-tensor<char, Device::CPU> * Ops::GPU::logical_or(
+tensor<char, Device::GPU> * Ops::GPU::logical_or(
     FromResolver::GPU::ResolveResult *input_data,
     const hsql::Expr *eval,
     hsql::LimitDescription *limit,
@@ -23,7 +23,7 @@ tensor<char, Device::CPU> * Ops::GPU::logical_or(
     const auto left_result  = FilterApplier::GPU::apply(input_data, left,  limit, tile_start, tile_size);
     const auto right_result = FilterApplier::GPU::apply(input_data, right, limit, tile_start, tile_size);
 
-    const auto result = new tensor<char, Device::CPU>(*left_result || *right_result);
+    const auto result = new tensor<char, Device::GPU>(*left_result || *right_result);
 
     delete left_result;
     delete right_result;

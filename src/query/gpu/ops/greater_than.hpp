@@ -12,7 +12,7 @@
 
 
 namespace Ops::GPU {
-    tensor<char, Device::CPU>* greater_than(
+    tensor<char, Device::GPU>* greater_than(
         FromResolver::GPU::ResolveResult *input_data,
         hsql::Expr *left,
         hsql::Expr *right,

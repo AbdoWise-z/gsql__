@@ -5,12 +5,18 @@
 #ifndef GPU_TENSOR_HPP
 #define GPU_TENSOR_HPP
 
+#include "query/gpu/gpu_function_interface.cuh"
+#include "query/gpu/gpu_function_interface.cuh"
 #include "utils/memory.cuh"
 
 namespace GFI {
     void fill(tensor<char, Device::GPU>* output_data, char value);
     void fill(tensor<char, Device::GPU>* output_data, char value, 
              std::vector<size_t> position, std::vector<size_t> mask);
+
+    void logical_and(const tensor<char, Device::GPU> *a, const tensor<char, Device::GPU> *b, tensor<char, Device::GPU> *out);
+    void logical_or (const tensor<char, Device::GPU> *a, const tensor<char, Device::GPU> *b, tensor<char, Device::GPU> *out);
+    void logical_not(const tensor<char, Device::GPU> *a, tensor<char, Device::GPU> *out);
 }
 
 template<typename T>
@@ -134,6 +140,39 @@ public:
         }
 
         GFI::fill(this, t, pos, dims);
+    }
+
+    virtual tensor<T, Device::GPU> operator&&(const tensor<T, Device::GPU>& other) {
+        if (other.shape != this->shape) {
+            throw std::runtime_error("[AND] Tensor size mismatch");
+        }
+
+        tensor result(this->shape);
+
+        GFI::logical_and(this, &other, &result);
+
+        return result;
+    }
+
+    virtual tensor<T, Device::GPU> operator||(const tensor<T, Device::GPU>& other) {
+        if (other.shape != this->shape) {
+            throw std::runtime_error("[AND] Tensor size mismatch");
+        }
+
+        tensor result(this->shape);
+
+        GFI::logical_or(this, &other, &result);
+
+        return result;
+    }
+
+    virtual tensor<T, Device::GPU> operator!() {
+
+        tensor result(this->shape);
+
+        GFI::logical_not(this, &result);
+
+        return result;
     }
 };
 

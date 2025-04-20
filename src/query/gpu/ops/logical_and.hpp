@@ -12,7 +12,7 @@
 
 
 namespace Ops::GPU {
-    tensor<char, Device::CPU>* logical_and(
+    tensor<char, Device::GPU>* logical_and(
         FromResolver::GPU::ResolveResult *input_data,
         const hsql::Expr *eval,
         hsql::LimitDescription *limit,

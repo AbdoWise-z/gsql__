@@ -104,12 +104,12 @@ set(SOURCES
         src/query/gpu/ops/equality.cpp
         src/query/gpu/ops/equality.hpp
 
-#        src/query/gpu/ops/logical_and.cpp
-#        src/query/gpu/ops/logical_and.hpp
-#        src/query/gpu/ops/logical_or.cpp
-#        src/query/gpu/ops/logical_or.hpp
-#        src/query/gpu/ops/greater_than.cpp
-#        src/query/gpu/ops/greater_than.hpp
+        src/query/gpu/ops/logical_and.cpp
+        src/query/gpu/ops/logical_and.hpp
+        src/query/gpu/ops/logical_or.cpp
+        src/query/gpu/ops/logical_or.hpp
+        src/query/gpu/ops/greater_than.cpp
+        src/query/gpu/ops/greater_than.hpp
         src/query/gpu/agg/sum_avg_count.cpp
         src/query/gpu/agg/sum_avg_count.hpp
         src/query/gpu/agg/max_min.cpp

@@ -10,7 +10,7 @@
 
 // #define OP_GREATER_DEBUG
 
-tensor<char, Device::CPU> * Ops::GPU::greater_than(
+tensor<char, Device::GPU> * Ops::GPU::greater_than(
     FromResolver::GPU::ResolveResult *input_data,
     hsql::Expr *left,
     hsql::Expr *right,
@@ -26,7 +26,7 @@ tensor<char, Device::CPU> * Ops::GPU::greater_than(
     for (int i = 0;i < input_data->table_names.size();i++) {
         auto table = input_data->tables[i];
         if (table->columns.empty()) {
-            return new tensor<char, Device::CPU>({});
+            return new tensor<char, Device::GPU>({});
         } else {
             if (!tile_size.empty())
                 result_size.push_back(tile_size[i]);
@@ -38,7 +38,8 @@ tensor<char, Device::CPU> * Ops::GPU::greater_than(
     std::vector<size_t> result_offset(result_size.size(), 0);
     if (!tile_start.empty()) result_offset = tile_start;
 
-    auto* result = new tensor<char, Device::CPU>(result_size);
+    auto* result = new tensor<char, Device::GPU>(result_size);
+
     if (left->isLiteral() && right->isLiteral()) {
 #ifdef OP_GREATER_DEBUG
         std::cout << "kExprOperator::Greater two literals" << std::endl;

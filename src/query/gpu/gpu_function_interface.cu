@@ -161,3 +161,38 @@ void GFI::equality(
     cu::free(_tileOffset);
     cu::free(_tileSize);
 }
+
+void GFI::logical_and(const tensor<char, Device::GPU> *a, const tensor<char, Device::GPU> *b, tensor<char, Device::GPU> *out) {
+    const auto size = out->totalSize();
+    dim3 grid((size + Cfg::BlockDimX - 1) / (Cfg::BlockDimX));
+
+    TensorKernel::logical_and<<<grid, dim3(Cfg::BlockDimX)>>>(
+        a->data,
+        b->data,
+        size,
+        out->data
+    );
+}
+
+void GFI::logical_or(const tensor<char, Device::GPU> *a, const tensor<char, Device::GPU> *b, tensor<char, Device::GPU> *out) {
+    const auto size = out->totalSize();
+    dim3 grid((size + Cfg::BlockDimX - 1) / (Cfg::BlockDimX));
+
+    TensorKernel::logical_or<<<grid, dim3(Cfg::BlockDimX)>>>(
+        a->data,
+        b->data,
+        size,
+        out->data
+    );
+}
+
+void GFI::logical_not(const tensor<char, Device::GPU> *a, tensor<char, Device::GPU> *out) {
+    const auto size = out->totalSize();
+    dim3 grid((size + Cfg::BlockDimX - 1) / (Cfg::BlockDimX));
+
+    TensorKernel::logical_not<<<grid, dim3(Cfg::BlockDimX)>>>(
+        a->data,
+        size,
+        out->data
+    );
+}

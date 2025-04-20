@@ -5,9 +5,9 @@
 #include "filter_applier.hpp"
 
 #include "ops/equality.hpp"
-// #include "ops/greater_than.hpp"
-// #include "ops/logical_and.hpp"
-// #include "ops/logical_or.hpp"
+#include "ops/greater_than.hpp"
+#include "ops/logical_and.hpp"
+#include "ops/logical_or.hpp"
 #include "query/errors.hpp"
 
 // #define FILTER_DEBUG
@@ -47,50 +47,50 @@ tensor<char, Device::GPU>* FilterApplier::GPU::apply(
 #ifdef FILTER_DEBUG
         std::cout << "hsql::ExprType::kExprOperator" << op << std::endl;
 #endif
-        // if (op == hsql::kOpAnd) {
-        //     return Ops::GPU::logical_and(input_data, eval, limit, tile_start, tile_size);
-        // }
-        //
-        // if (op == hsql::kOpOr) {
-        //     return Ops::GPU::logical_or(input_data, eval, limit, tile_start, tile_size);
-        // }
+        if (op == hsql::kOpAnd) {
+            return Ops::GPU::logical_and(input_data, eval, limit, tile_start, tile_size);
+        }
+
+        if (op == hsql::kOpOr) {
+            return Ops::GPU::logical_or(input_data, eval, limit, tile_start, tile_size);
+        }
 
         if (op == hsql::kOpEquals) {
             return Ops::GPU::equality(input_data, eval, limit, tile_start, tile_size);
         }
 
-        // if (op == hsql::kOpGreater) {
-        //     return Ops::GPU::greater_than(input_data, eval->expr, eval->expr2, limit, tile_start, tile_size);
-        // }
-        //
-        // if (op == hsql::kOpLess) {
-        //     return Ops::GPU::greater_than(input_data, eval->expr2, eval->expr, limit, tile_start, tile_size);
-        // }
-        //
-        // if (op == hsql::kOpGreaterEq) {
-        //     auto t1 = Ops::GPU::greater_than(input_data, eval->expr, eval->expr2, limit, tile_start, tile_size);
-        //     auto t2 = Ops::GPU::equality(input_data, eval, limit, tile_start, tile_size);
-        //     auto result = new tensor<char, Device::CPU>(*t1 || *t2);
-        //     delete t1;
-        //     delete t2;
-        //     return result; // yes I am lazy sue me ig.
-        // }
-        //
-        // if (op == hsql::kOpLessEq) {
-        //     auto t1 = Ops::GPU::greater_than(input_data, eval->expr2, eval->expr, limit, tile_start, tile_size);
-        //     auto t2 = Ops::GPU::equality(input_data, eval, limit, tile_start, tile_size);
-        //     auto result = new tensor<char, Device::CPU>(*t1 || *t2);
-        //     delete t1;
-        //     delete t2;
-        //     return result;
-        // }
-        //
-        // if (op == hsql::kOpNotEquals) {
-        //     auto t2 = Ops::GPU::equality(input_data, eval, limit, tile_start, tile_size);
-        //     auto result = new tensor<char, Device::CPU>(!*t2);
-        //     delete t2;
-        //     return result;
-        // }
+        if (op == hsql::kOpGreater) {
+            return Ops::GPU::greater_than(input_data, eval->expr, eval->expr2, limit, tile_start, tile_size);
+        }
+
+        if (op == hsql::kOpLess) {
+            return Ops::GPU::greater_than(input_data, eval->expr2, eval->expr, limit, tile_start, tile_size);
+        }
+
+        if (op == hsql::kOpGreaterEq) {
+            auto t1 = Ops::GPU::greater_than(input_data, eval->expr, eval->expr2, limit, tile_start, tile_size);
+            auto t2 = Ops::GPU::equality(input_data, eval, limit, tile_start, tile_size);
+            auto result = new tensor<char, Device::GPU>(*t1 || *t2);
+            delete t1;
+            delete t2;
+            return result; // yes I am lazy sue me ig.
+        }
+
+        if (op == hsql::kOpLessEq) {
+            auto t1 = Ops::GPU::greater_than(input_data, eval->expr2, eval->expr, limit, tile_start, tile_size);
+            auto t2 = Ops::GPU::equality(input_data, eval, limit, tile_start, tile_size);
+            auto result = new tensor<char, Device::GPU>(*t1 || *t2);
+            delete t1;
+            delete t2;
+            return result;
+        }
+
+        if (op == hsql::kOpNotEquals) {
+            auto t2 = Ops::GPU::equality(input_data, eval, limit, tile_start, tile_size);
+            auto result = new tensor<char, Device::GPU>(!*t2);
+            delete t2;
+            return result;
+        }
 
         throw UnsupportedOperatorError(std::to_string(op));
     } else if (expr_type == hsql::ExprType::kExprLiteralString) {
