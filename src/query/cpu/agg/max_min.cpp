@@ -8,7 +8,7 @@
 
 //#define MAX_MIN_DEBUG
 
-tval Agg::max(column *col) {
+tval Agg::CPU::max(column *col) {
     if (col->type == STRING)
         throw UnsupportedOperationError("Cannot aggregate (max) over a string column");
 
@@ -37,7 +37,7 @@ tval Agg::max(column *col) {
     return create_from("ERROR IN AGG MAX");
 }
 
-tval Agg::min(column *col) {
+tval Agg::CPU::min(column *col) {
     if (col->type == STRING)
         throw UnsupportedOperationError("Cannot aggregate (min) over a string column");
 

@@ -6,7 +6,7 @@
 
 #include "query/errors.hpp"
 
-tval Agg::sum(column *col) {
+tval Agg::CPU::sum(column *col) {
     if (col->type == STRING)
         throw UnsupportedOperationError("Cannot aggregate (sum) over a string column");
 
@@ -31,7 +31,7 @@ tval Agg::sum(column *col) {
     return create_from("ERROR IN AGG SUM");
 }
 
-tval Agg::avg(column *col) {
+tval Agg::CPU::avg(column *col) {
     if (col->type == STRING)
         throw UnsupportedOperationError("Cannot aggregate (avg) over a string column");
 
@@ -60,6 +60,6 @@ tval Agg::avg(column *col) {
     return create_from("ERROR IN AGG SUM");
 }
 
-tval Agg::count(const column *col) {
+tval Agg::CPU::count(const column *col) {
     return create_from(static_cast<int64_t>(col->data.size()));
 }

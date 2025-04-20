@@ -8,7 +8,7 @@
 #include "db/value_helper.hpp"
 
 
-namespace Agg {
+namespace Agg::CPU {
     tval sum(column* col);
     tval avg(column* col);
     tval count(const column* col);

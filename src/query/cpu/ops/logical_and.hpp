@@ -11,9 +11,9 @@
 #include "tensor/tensor.hpp"
 
 
-namespace Ops {
-    tensor<char, CPU>* logical_and(
-        FromResolver::ResolveResult *input_data,
+namespace Ops::CPU {
+    tensor<char, Device::CPU>* logical_and(
+        FromResolver::CPU::ResolveResult *input_data,
         const hsql::Expr *eval,
         hsql::LimitDescription *limit,
         const std::vector<size_t>& tile_start = {},

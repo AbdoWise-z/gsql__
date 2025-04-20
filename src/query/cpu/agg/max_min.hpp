@@ -8,7 +8,7 @@
 #include "db/value_helper.hpp"
 
 
-namespace Agg {
+namespace Agg::CPU {
     tval max(column* col);
     tval min(column* col);
 }

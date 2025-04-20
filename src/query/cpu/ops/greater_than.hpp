@@ -11,9 +11,9 @@
 #include "tensor/tensor.hpp"
 
 
-namespace Ops {
-    tensor<char, CPU>* greater_than(
-        FromResolver::ResolveResult *input_data,
+namespace Ops::CPU {
+    tensor<char, Device::CPU>* greater_than(
+        FromResolver::CPU::ResolveResult *input_data,
         hsql::Expr *left,
         hsql::Expr *right,
         hsql::LimitDescription *limit,

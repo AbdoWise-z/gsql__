@@ -11,9 +11,9 @@
 #include "tensor/tensor.hpp"
 
 
-namespace FilterApplier {
-     tensor<char, CPU>* apply(
-         FromResolver::ResolveResult *input_data,
+namespace FilterApplier::CPU {
+     tensor<char, Device::CPU>* apply(
+         FromResolver::CPU::ResolveResult *input_data,
          hsql::Expr* eval,                                       // the join / filter expression
          hsql::LimitDescription* limit,                          // max number of returned rows
          const std::vector<size_t>& tile_start = {},

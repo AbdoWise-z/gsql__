@@ -12,8 +12,8 @@
 
 // #define FILTER_DEBUG
 
-tensor<char, CPU>* FilterApplier::apply(
-        FromResolver::ResolveResult *input_data,
+tensor<char, Device::CPU>* FilterApplier::CPU::apply(
+        FromResolver::CPU::ResolveResult *input_data,
         hsql::Expr *eval,
         hsql::LimitDescription *limit,
         const std::vector<size_t>& tile_start,
@@ -25,7 +25,7 @@ tensor<char, CPU>* FilterApplier::apply(
     for (int i = 0;i < input_data->table_names.size();i++) {
         auto table = input_data->tables[i];
         if (table->columns.empty()) {
-            return new tensor<char, CPU>({});
+            return new tensor<char, Device::CPU>({});
         } else {
             if (!tile_size.empty())
                 result_size.push_back(tile_size[i]);
@@ -35,7 +35,7 @@ tensor<char, CPU>* FilterApplier::apply(
     }
 
     if (eval == nullptr) { // pass all
-        auto* result = new tensor<char, CPU>(result_size);
+        auto* result = new tensor<char, Device::CPU>(result_size);
         result->setAll(1);
         return result;
     }
@@ -48,46 +48,46 @@ tensor<char, CPU>* FilterApplier::apply(
         std::cout << "hsql::ExprType::kExprOperator" << op << std::endl;
 #endif
         if (op == hsql::kOpAnd) {
-            return Ops::logical_and(input_data, eval, limit, tile_start, tile_size);
+            return Ops::CPU::logical_and(input_data, eval, limit, tile_start, tile_size);
         }
 
         if (op == hsql::kOpOr) {
-            return Ops::logical_or(input_data, eval, limit, tile_start, tile_size);
+            return Ops::CPU::logical_or(input_data, eval, limit, tile_start, tile_size);
         }
 
         if (op == hsql::kOpEquals) {
-            return Ops::equality(input_data, eval, limit, tile_start, tile_size);
+            return Ops::CPU::equality(input_data, eval, limit, tile_start, tile_size);
         }
 
         if (op == hsql::kOpGreater) {
-            return Ops::greater_than(input_data, eval->expr, eval->expr2, limit, tile_start, tile_size);
+            return Ops::CPU::greater_than(input_data, eval->expr, eval->expr2, limit, tile_start, tile_size);
         }
 
         if (op == hsql::kOpLess) {
-            return Ops::greater_than(input_data, eval->expr2, eval->expr, limit, tile_start, tile_size);
+            return Ops::CPU::greater_than(input_data, eval->expr2, eval->expr, limit, tile_start, tile_size);
         }
 
         if (op == hsql::kOpGreaterEq) {
-            auto t1 = Ops::greater_than(input_data, eval->expr, eval->expr2, limit, tile_start, tile_size);
-            auto t2 = Ops::equality(input_data, eval, limit, tile_start, tile_size);
-            auto result = new tensor(*t1 || *t2);
+            auto t1 = Ops::CPU::greater_than(input_data, eval->expr, eval->expr2, limit, tile_start, tile_size);
+            auto t2 = Ops::CPU::equality(input_data, eval, limit, tile_start, tile_size);
+            auto result = new tensor<char, Device::CPU>(*t1 || *t2);
             delete t1;
             delete t2;
             return result; // yes I am lazy sue me ig.
         }
 
         if (op == hsql::kOpLessEq) {
-            auto t1 = Ops::greater_than(input_data, eval->expr2, eval->expr, limit, tile_start, tile_size);
-            auto t2 = Ops::equality(input_data, eval, limit, tile_start, tile_size);
-            auto result = new tensor(*t1 || *t2);
+            auto t1 = Ops::CPU::greater_than(input_data, eval->expr2, eval->expr, limit, tile_start, tile_size);
+            auto t2 = Ops::CPU::equality(input_data, eval, limit, tile_start, tile_size);
+            auto result = new tensor<char, Device::CPU>(*t1 || *t2);
             delete t1;
             delete t2;
             return result;
         }
 
         if (op == hsql::kOpNotEquals) {
-            auto t2 = Ops::equality(input_data, eval, limit, tile_start, tile_size);
-            auto result = new tensor(!*t2);
+            auto t2 = Ops::CPU::equality(input_data, eval, limit, tile_start, tile_size);
+            auto result = new tensor<char, Device::CPU>(!*t2);
             delete t2;
             return result;
         }
@@ -98,7 +98,7 @@ tensor<char, CPU>* FilterApplier::apply(
         std::cout << "hsql::ExprType::kExprLiteralString" << std::endl;
 #endif
 
-        auto* result = new tensor<char, CPU>(result_size);
+        auto* result = new tensor<char, Device::CPU>(result_size);
         result->setAll(strlen(eval->name) > 0 ? 1 : 0);
         return result;
     } else if (expr_type == hsql::ExprType::kExprLiteralInt) {
@@ -106,7 +106,7 @@ tensor<char, CPU>* FilterApplier::apply(
         std::cout << "hsql::ExprType::kExprLiteralInt" << std::endl;
 #endif
 
-        auto* result = new tensor<char, CPU>(result_size);
+        auto* result = new tensor<char, Device::CPU>(result_size);
         result->setAll(eval->ival > 0 ? 1 : 0);
         return result;
     } else if (expr_type == hsql::ExprType::kExprLiteralFloat) {
@@ -114,7 +114,7 @@ tensor<char, CPU>* FilterApplier::apply(
         std::cout << "hsql::ExprType::kExprLiteralFloat" << std::endl;
 #endif
 
-        auto* result = new tensor<char, CPU>(result_size);
+        auto* result = new tensor<char, Device::CPU>(result_size);
         result->setAll(eval->fval > 0 ? 1 : 0);
         return result;
     } else {

@@ -262,21 +262,21 @@ void sql(std::vector<std::string> params) {
 
     std::cout << "Running Query: " << color(query, CYAN_FG) << std::endl;
 
-    hsql::SQLParserResult result;
-    hsql::SQLParser::parse(query, &result);
+    hsql::SQLParserResult parser_result;
+    hsql::SQLParser::parse(query, &parser_result);
     try {
-        auto r_vec = CPUExecutor::executeQuery(result);
+        auto r_vec = time_it(CPUExecutor::executeQuery(parser_result));
         for (auto t: r_vec) {
             std::cout << "Result: " << std::endl;
             std::cout << table::details(t) << std::endl;
 
             int i = 0;
-            while (global_tables.contains("result-" + std::to_string(i))) {
+            while (global_tables.contains("result_" + std::to_string(i))) {
                 i++;
             }
 
-            global_tables["result-" + std::to_string(i)] = t;
-            std::cout << "Result saved on table: " << color("result-" + std::to_string(i), GREEN_FG) << std::endl;
+            global_tables["result_" + std::to_string(i)] = t;
+            std::cout << "Result saved on table: " << color("result_" + std::to_string(i), GREEN_FG) << std::endl;
         }
     } catch (const std::exception& e) {
         std::cout << "Query failed: " << color(e.what(), RED_FG) << std::endl;

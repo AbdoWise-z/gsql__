@@ -10,7 +10,7 @@
 #include "db/table.hpp"
 
 
-namespace FromResolver {
+namespace FromResolver::CPU {
     struct ResolveResult {
         std::vector<std::unordered_set<std::string>> table_names;
         std::vector<table*> tables;

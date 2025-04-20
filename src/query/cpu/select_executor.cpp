@@ -19,7 +19,8 @@
 
 #define SELECT_DEBUG
 
-table* SelectExecutor::Execute(hsql::SQLStatement *statement) {
+table* SelectExecutor::CPU::Execute(hsql::SQLStatement *statement) {
+
     const auto* stmnt = dynamic_cast<hsql::SelectStatement*>(statement);
     if (stmnt == nullptr) {
         throw std::invalid_argument("Not a Select SQL statement");
@@ -31,7 +32,7 @@ table* SelectExecutor::Execute(hsql::SQLStatement *statement) {
     }
 
     // resolve the input
-    auto query_input = FromResolver::resolve(from);
+    auto query_input = FromResolver::CPU::resolve(from);
 
 #ifdef SELECT_DEBUG
     std::cout << "Query: " << std::endl;
@@ -85,7 +86,7 @@ table* SelectExecutor::Execute(hsql::SQLStatement *statement) {
     std::cout.flush();
 #endif
     for (auto tile: tiles) {
-        auto intermediate = FilterApplier::apply(
+        auto intermediate = FilterApplier::CPU::apply(
             &query_input,
             where,
             limit,
@@ -203,23 +204,23 @@ table* SelectExecutor::Execute(hsql::SQLStatement *statement) {
             if (func_name == "sum") {
                 final_result->columns.push_back(new column());
                 final_result->columns.back()->type = col->type;
-                final_result->columns.back()->data.push_back(Agg::sum(col));
+                final_result->columns.back()->data.push_back(Agg::CPU::sum(col));
             } else if (func_name == "count") {
                 final_result->columns.push_back(new column());
                 final_result->columns.back()->type = INTEGER;
-                final_result->columns.back()->data.push_back(Agg::count(col));
+                final_result->columns.back()->data.push_back(Agg::CPU::count(col));
             } else if (func_name == "avg") {
                 final_result->columns.push_back(new column());
                 final_result->columns.back()->type = FLOAT;
-                final_result->columns.back()->data.push_back(Agg::avg(col));
+                final_result->columns.back()->data.push_back(Agg::CPU::avg(col));
             } else if (func_name == "min") {
                 final_result->columns.push_back(new column());
                 final_result->columns.back()->type = col->type;
-                final_result->columns.back()->data.push_back(Agg::min(col));
+                final_result->columns.back()->data.push_back(Agg::CPU::min(col));
             } else if (func_name == "max") {
                 final_result->columns.push_back(new column());
                 final_result->columns.back()->type = col->type;
-                final_result->columns.back()->data.push_back(Agg::max(col));
+                final_result->columns.back()->data.push_back(Agg::CPU::max(col));
             } else {
                 throw UnsupportedOperationError("Function not supported");
             }
@@ -233,9 +234,9 @@ table* SelectExecutor::Execute(hsql::SQLStatement *statement) {
     return final_result;
 }
 
-SelectExecutor::ConstructionResult SelectExecutor::ConstructTable(
-    tensor<char, CPU>* intermediate,
-    const FromResolver::ResolveResult* input
+SelectExecutor::CPU::ConstructionResult SelectExecutor::CPU::ConstructTable(
+    tensor<char, Device::CPU>* intermediate,
+    const FromResolver::CPU::ResolveResult* input
     ) {
     size_t resultSize = intermediate->totalSize();
 
@@ -286,9 +287,9 @@ SelectExecutor::ConstructionResult SelectExecutor::ConstructTable(
     };
 }
 
-void SelectExecutor::AppendTable(
-    tensor<char, CPU> *intermediate,
-    const FromResolver::ResolveResult *input,
+void SelectExecutor::CPU::AppendTable(
+    tensor<char, Device::CPU> *intermediate,
+    const FromResolver::CPU::ResolveResult *input,
     const std::vector<size_t> &offset,
     const table *result
     ) {
@@ -325,7 +326,7 @@ void SelectExecutor::AppendTable(
     }
 }
 
-int SelectExecutor::getColumn(const ConstructionResult *result, const std::string& table, const std::string& column) {
+int SelectExecutor::CPU::getColumn(const ConstructionResult *result, const std::string& table, const std::string& column) {
     bool table_found = false;
     for (int i = 0;i < result->col_source.size();i++) {
         if (table == "" || result->col_source[i].contains(table)) {
@@ -341,10 +342,10 @@ int SelectExecutor::getColumn(const ConstructionResult *result, const std::strin
 }
 
 static void ScheduleInternalRecursive(
-        std::vector<SelectExecutor::MultDimVector>& result,
+        std::vector<SelectExecutor::CPU::MultDimVector>& result,
         const std::vector<size_t>& inputSize,
         const std::vector<size_t>& tileSize,
-        SelectExecutor::MultDimVector pos,
+        SelectExecutor::CPU::MultDimVector pos,
         int dim = 0
     ) {
 
@@ -364,7 +365,7 @@ static void ScheduleInternalRecursive(
     }
 }
 
-std::vector<SelectExecutor::MultDimVector> SelectExecutor::Schedule(const std::vector<size_t> &inputSize) {
+std::vector<SelectExecutor::CPU::MultDimVector> SelectExecutor::CPU::Schedule(const std::vector<size_t> &inputSize) {
     std::vector<MultDimVector> result;
     std::vector<size_t> _startPos(inputSize.size(), 0);
     std::vector<size_t> _tileSize = Cfg::getTileSizeFor(inputSize);

@@ -12,7 +12,7 @@
 #include "tensor/tensor.hpp"
 #include "db/table.hpp"
 
-namespace SelectExecutor {
+namespace SelectExecutor::CPU {
     struct ConstructionResult {
         table* result;
         std::vector<std::unordered_set<std::string>> col_source;
@@ -21,13 +21,13 @@ namespace SelectExecutor {
     table* Execute(hsql::SQLStatement* statement);
 
     ConstructionResult ConstructTable(
-       tensor<char, CPU>* intermediate,
-       const FromResolver::ResolveResult* input
+       tensor<char, Device::CPU>* intermediate,
+       const FromResolver::CPU::ResolveResult* input
        );
 
     void AppendTable(
-       tensor<char, CPU>* intermediate,
-       const FromResolver::ResolveResult* input,
+       tensor<char, Device::CPU>* intermediate,
+       const FromResolver::CPU::ResolveResult* input,
        const std::vector<size_t> &offset,
        const table* result
        );

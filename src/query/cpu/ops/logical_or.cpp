@@ -7,8 +7,8 @@
 
 // #define OP_OR_DEBUG
 
-tensor<char, CPU> * Ops::logical_or(
-    FromResolver::ResolveResult *input_data,
+tensor<char, Device::CPU> * Ops::CPU::logical_or(
+    FromResolver::CPU::ResolveResult *input_data,
     const hsql::Expr *eval,
     hsql::LimitDescription *limit,
     const std::vector<size_t>& tile_start,
@@ -20,10 +20,10 @@ tensor<char, CPU> * Ops::logical_or(
     const auto left  = eval->expr;
     const auto right = eval->expr2;
 
-    const auto left_result  = FilterApplier::apply(input_data, left,  limit, tile_start, tile_size);
-    const auto right_result = FilterApplier::apply(input_data, right, limit, tile_start, tile_size);
+    const auto left_result  = FilterApplier::CPU::apply(input_data, left,  limit, tile_start, tile_size);
+    const auto right_result = FilterApplier::CPU::apply(input_data, right, limit, tile_start, tile_size);
 
-    auto result = new tensor(*left_result || *right_result);
+    const auto result = new tensor<char, Device::CPU>(*left_result || *right_result);
 
     delete left_result;
     delete right_result;

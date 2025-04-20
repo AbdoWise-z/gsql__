@@ -11,7 +11,7 @@
 #include "store.hpp"
 #include "query/errors.hpp"
 
-FromResolver::ResolveResult FromResolver::merge(ResolveResult *a, ResolveResult *b) {
+FromResolver::CPU::ResolveResult FromResolver::CPU::merge(ResolveResult *a, ResolveResult *b) {
     ResolveResult result;
     for (int i = 0;i < a->table_names.size();i++) { // add a normally
         auto names = a->table_names[i];
@@ -30,7 +30,7 @@ FromResolver::ResolveResult FromResolver::merge(ResolveResult *a, ResolveResult 
 
         // we need to check for dubs
         for (auto name: names) {
-            auto k = FromResolver::find(&result, name);
+            auto k = FromResolver::CPU::find(&result, name);
             if (k != -1) {
                 throw std::runtime_error("Duplicate table name: " + name);
             }
@@ -44,7 +44,7 @@ FromResolver::ResolveResult FromResolver::merge(ResolveResult *a, ResolveResult 
     return result;
 }
 
-int FromResolver::find(ResolveResult *a, std::string tname) {
+int FromResolver::CPU::find(ResolveResult *a, std::string tname) {
     for (int i = 0;i < a->table_names.size();i++) {
         if (a->table_names[i].contains(tname)) {
             return i;
@@ -54,7 +54,7 @@ int FromResolver::find(ResolveResult *a, std::string tname) {
     return -1;
 }
 
-FromResolver::ResolveResult FromResolver::resolve(hsql::TableRef * ref) {
+FromResolver::CPU::ResolveResult FromResolver::CPU::resolve(hsql::TableRef * ref) {
     std::vector<std::unordered_set<std::string>> table_names;
     std::vector<table*> table_values;
     std::vector<bool> temporary_table;
@@ -80,12 +80,12 @@ FromResolver::ResolveResult FromResolver::resolve(hsql::TableRef * ref) {
             throw std::runtime_error("Invalid table reference");
 
         table_names.push_back({ref->alias->name});
-        table_values.push_back(SelectExecutor::Execute(ref->select));
+        table_values.push_back(SelectExecutor::CPU::Execute(ref->select));
         temporary_table.push_back(true);
 
     } else if (ref->type == hsql::kTableCrossProduct) {
         for (auto tableName: *(ref->list)) { // execute each sub-import alone and return the final result
-            auto result = FromResolver::resolve(tableName);
+            auto result = FromResolver::CPU::resolve(tableName);
             for (int i = 0;i < result.table_names.size();i++) {
                 auto names = result.table_names[i];
                 auto table = result.tables[i];
@@ -103,12 +103,12 @@ FromResolver::ResolveResult FromResolver::resolve(hsql::TableRef * ref) {
     } else if (ref->type == hsql::kTableJoin) {
         auto join = ref->join;
 
-        auto left = FromResolver::resolve(join->left);
-        auto right = FromResolver::resolve(join->right);
-        auto merged = FromResolver::merge(&left, &right);
+        auto left = FromResolver::CPU::resolve(join->left);
+        auto right = FromResolver::CPU::resolve(join->right);
+        auto merged = FromResolver::CPU::merge(&left, &right);
 
-        auto tensor = FilterApplier::apply(&merged, join->condition, nullptr);
-        auto result = SelectExecutor::ConstructTable(tensor, &merged);
+        auto tensor = FilterApplier::CPU::apply(&merged, join->condition, nullptr);
+        auto result = SelectExecutor::CPU::ConstructTable(tensor, &merged);
         delete tensor;
 
         std::unordered_set<std::string> final_result;

@@ -10,8 +10,8 @@
 
 // #define OP_GREATER_DEBUG
 
-tensor<char, CPU> * Ops::greater_than(
-    FromResolver::ResolveResult *input_data,
+tensor<char, Device::CPU> * Ops::CPU::greater_than(
+    FromResolver::CPU::ResolveResult *input_data,
     hsql::Expr *left,
     hsql::Expr *right,
     hsql::LimitDescription *limit,
@@ -26,7 +26,7 @@ tensor<char, CPU> * Ops::greater_than(
     for (int i = 0;i < input_data->table_names.size();i++) {
         auto table = input_data->tables[i];
         if (table->columns.empty()) {
-            return new tensor<char, CPU>({});
+            return new tensor<char, Device::CPU>({});
         } else {
             if (!tile_size.empty())
                 result_size.push_back(tile_size[i]);
@@ -38,7 +38,7 @@ tensor<char, CPU> * Ops::greater_than(
     std::vector<size_t> result_offset(result_size.size(), 0);
     if (!tile_start.empty()) result_offset = tile_start;
 
-    auto* result = new tensor<char, CPU>(result_size);
+    auto* result = new tensor<char, Device::CPU>(result_size);
     if (left->isLiteral() && right->isLiteral()) {
 #ifdef OP_GREATER_DEBUG
         std::cout << "kExprOperator::Greater two literals" << std::endl;
@@ -113,7 +113,7 @@ tensor<char, CPU> * Ops::greater_than(
             table_name = col->table;
         }
 
-        auto table_idx = FromResolver::find(input_data, table_name);
+        auto table_idx = FromResolver::CPU::find(input_data, table_name);
         if (table_idx == -1 ||
             std::find(
                 input_data->tables[table_idx]->headers.begin(),
@@ -275,7 +275,7 @@ tensor<char, CPU> * Ops::greater_than(
         table_name_r = right->table;
     }
 
-    auto table_idx = FromResolver::find(input_data, table_name_l);
+    auto table_idx = FromResolver::CPU::find(input_data, table_name_l);
     if (table_idx == -1 ||
             std::find(
                 input_data->tables[table_idx]->headers.begin(),
@@ -290,7 +290,7 @@ tensor<char, CPU> * Ops::greater_than(
     ptrdiff_t pos_l = std::find(table_ptr_l->headers.begin(), table_ptr_l->headers.end(), col_name_l) - table_ptr_l->headers.begin();
     auto column_ptr_l = table_ptr_l->columns[pos_l];
 
-    table_idx = FromResolver::find(input_data, table_name_r);
+    table_idx = FromResolver::CPU::find(input_data, table_name_r);
     if (table_idx == -1 ||
             std::find(
                 input_data->tables[table_idx]->headers.begin(),

@@ -14,7 +14,7 @@
 static table* statementExecutor(hsql::SQLStatement* statement) {
     switch (statement->type()) {
         case hsql::kStmtSelect:
-            return SelectExecutor::Execute(statement);
+            return SelectExecutor::CPU::Execute(statement);
         default:
             throw UnsupportedOperationError(statement->type());
     }
