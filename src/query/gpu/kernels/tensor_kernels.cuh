@@ -16,7 +16,6 @@ namespace TensorKernel {
     __global__ void fill_kernel(char *output_data, size_t dataSize, char value, size_t* center_pos, size_t *mask, size_t *shape, size_t maskSize);
     __device__ void unmap(size_t* mask, size_t* pos, size_t index, size_t size);
     __device__ size_t map(size_t* indices, size_t* shape, size_t size);
-
     __global__ void extend_plain_kernel(char *output_data, size_t dataSize, size_t *mask, size_t *shape, size_t maskSize);
 };
 
