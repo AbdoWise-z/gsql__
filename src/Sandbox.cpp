@@ -8,20 +8,25 @@
 #include "query/gpu/gpu_function_interface.cuh"
 #include "tensor/tensor.hpp"
 
+#include <omp.h>
+#include <iostream>
+
 int main() {
-    auto t = new tensor<char, Device::GPU>({10, 10});
 
-    for (size_t i = 0; i < 10; i += 1) {
-        char c = 'a';
-        if (i % 2 == 0) c = 'b';
-        GFI::fill(t, c, {i, 0}, {0, 1});
+    int sum = 0;
+    std::vector<int> data(1000, 1);
+
+    for (auto& i : data) {
+        i = rand();
     }
 
-    auto cpu = t->toCPU();
-    for (size_t i = 0;i < 10;i++) {
-        for (size_t j = 0;j < 10;j++) {
-            std::cout << cpu[{i, j}] << " ";
+    #pragma omp parallel for
+    for (auto i : data) {
+        std::cout << "Thread " << omp_get_thread_num() << " handles iteration " << i << std::endl;
+        #pragma omp critical
+        {
+            sum += i;
         }
-        std::cout << std::endl;
     }
+    return 0;
 }

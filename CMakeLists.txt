@@ -13,10 +13,10 @@ set(CMAKE_CUDA_ARCHITECTURES 52)
 include_directories(libs)
 include_directories(src)
 link_directories(libs/hsql)
+find_package(OpenMP REQUIRED)
 
-# Source files
+
 set(SOURCES
-        src/main.cpp
         src/constants.hpp
 
         src/utils/clp.hpp
@@ -131,8 +131,15 @@ set(SOURCES
         src/query/gpu/kernels/inequality_kernel.cuh
 )
 
-# Create executable
-add_executable(gsql__ ${SOURCES})
+#
+# ==============================
+#              MAIN
+# ==============================
+#
+add_executable(gsql__
+        src/main.cpp
+        ${SOURCES}
+)
 
 set_target_properties(gsql__ PROPERTIES
         LINKER_LANGUAGE CUDA
@@ -142,8 +149,10 @@ set_target_properties(gsql__ PROPERTIES
 
 # Link with external libraries
 target_link_libraries(gsql__ PUBLIC
-        sqlparser
+        sqlparser OpenMP::OpenMP_CXX
 )
+
+target_compile_options(gsql__ PRIVATE ${OpenMP_CXX_FLAGS})
 
 # Make sure CUDA files are compiled with the CUDA compiler
 set_source_files_properties(
@@ -171,66 +180,36 @@ set_source_files_properties(
         PROPERTIES LANGUAGE CUDA
 )
 
-add_executable(details src/details.cu)
+#
+# ==============================
+#            SANDBOX
+# ==============================
+#
+add_executable(
+        Sandbox
+        src/Sandbox.cpp
+        ${SOURCES}
+)
 
-# Make sure CUDA files are compiled with the CUDA compiler
+set_target_properties(Sandbox PROPERTIES
+        LINKER_LANGUAGE CUDA
+        CUDA_RESOLVE_DEVICE_SYMBOLS ON
+)
+
+target_link_libraries(Sandbox PUBLIC
+        sqlparser OpenMP::OpenMP_CXX
+)
+
+target_compile_options(Sandbox PRIVATE ${OpenMP_CXX_FLAGS})
+
+
+#
+# ==============================
+#          CUDA Helper
+# ==============================
+#
+add_executable(details src/details.cu)
 set_source_files_properties(
         src/details.cu
         PROPERTIES LANGUAGE CUDA
 )
-
-add_executable(
-        Sandbox
-        src/Sandbox.cpp
-
-        src/utils/clp.hpp
-        src/tensor/tensor.hpp
-        src/tensor/cpu_tensor.hpp
-        src/tensor/gpu_tensor.hpp
-
-        src/utils/memory.cu
-        src/utils/memory.cuh
-
-        src/db/column.cpp
-        src/db/column.hpp
-
-        src/utils/murmur_hash3_cuda.cu
-        src/utils/murmur_hash3_cuda.cuh
-
-        src/db/typing.hpp
-
-        src/db/value_helper.cpp
-        src/db/value_helper.hpp
-
-        src/db/table.cpp
-        src/db/table.hpp
-
-        src/db/db_helper.cpp
-        src/db/db_helper.hpp
-
-        src/cli/cli.cpp
-        src/cli/cli.hpp
-
-        src/utils/konsol.cpp
-        src/utils/konsol.hpp
-
-        src/query/errors.cpp
-        src/query/errors.hpp
-
-        src/store.cpp
-        src/store.hpp
-
-        src/utils/string_utils.cpp
-        src/utils/string_utils.hpp
-
-        src/editor/NanoEditor.cpp
-        src/editor/NanoEditor.h
-
-        src/query/gpu/gpu_function_interface.cu
-        src/query/gpu/gpu_function_interface.cuh
-
-        src/query/gpu/kernels/tensor_kernels.cu
-        src/query/gpu/kernels/tensor_kernels.cuh
-)
-
-target_link_libraries(Sandbox PUBLIC sqlparser)
