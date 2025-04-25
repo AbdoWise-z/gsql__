@@ -10,11 +10,9 @@ std::unordered_map<std::string, table*> global_tables;
 namespace Cfg {
     size_t HashTableExtendableSize = 4;
 
-    size_t maxTensorElements = 512 * 512 * 512;
+    size_t maxTensorElements = 32 * 512 * 512;
 
-    size_t BlockDimX = 32 * 4;
-    size_t BlockDimY = 32 * 4;
-    size_t BlockDimZ = 32 * 4;
+    size_t BlockDim = 256;
 
     size_t maxGPUMemory = 1024 * 1024 * 1024; // 1 GB
 

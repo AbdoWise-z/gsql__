@@ -105,6 +105,8 @@ void show_table(std::vector<std::string> params) {
             case FLOAT:
                 w.push_back(25);
                 break;
+            case DateTime:
+                w.push_back(30);
         }
 
         count = std::min(count, static_cast<int>(table->columns[i]->data.size()) - start);
@@ -127,6 +129,15 @@ void show_table(std::vector<std::string> params) {
                 case FLOAT:
                     std::cout << std::setw(w[k]) << std::left << color(std::to_string(table->columns[k]->data[i].d) + " ", CYAN_FG) << "|";
                     break;
+                case DateTime:
+                    std::cout << std::setw(w[k]) << std::left << color(
+                        std::to_string(table->columns[k]->data[i].t->year)   + "-" +
+                            std::to_string(table->columns[k]->data[i].t->month)  + "-" +
+                            std::to_string(table->columns[k]->data[i].t->day)    + " " +
+                            std::to_string(table->columns[k]->data[i].t->hour)   + ":" +
+                            std::to_string(table->columns[k]->data[i].t->minute) + ":" +
+                            std::to_string(table->columns[k]->data[i].t->second)
+                            + " ", CYAN_FG) << "|";
             }
 
 

@@ -49,9 +49,7 @@ namespace Cfg {
 
     extern size_t maxTensorElements;
 
-    extern size_t BlockDimX;
-    extern size_t BlockDimY;
-    extern size_t BlockDimZ;
+    extern size_t BlockDim;
 
     extern size_t maxGPUMemory;
 

@@ -17,6 +17,12 @@ namespace TensorKernel {
     __global__ void logical_and(char* a, char* b, size_t size, char* out);
     __global__ void logical_or (char* a, char* b, size_t size, char* out);
     __global__ void logical_not(char* a, size_t size, char* out);
+
+    __global__ void sparce_tensor_iterator(const char* a, size_t* out, size_t size);
+
+    __global__ void efficient_prefix_sum(char* input, size_t* output, int n, size_t* aux);
+    __global__ void efficient_prefix_sum(size_t* input, size_t* output, int n, size_t* aux);
+    __global__ void add_aux(size_t* input, int n, const size_t* aux);
 };
 
 

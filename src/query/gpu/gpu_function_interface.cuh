@@ -14,6 +14,9 @@ namespace GFI {
     void fill(tensor<char, Device::GPU> *output_data, char value);
     void fill(tensor<char, Device::GPU> *output_data, char value, std::vector<size_t> position, std::vector<size_t> mask);
 
+    void logical_and(const tensor<char, Device::GPU> *a, const tensor<char, Device::GPU> *b, tensor<char, Device::GPU> *out);
+    void logical_or (const tensor<char, Device::GPU> *a, const tensor<char, Device::GPU> *b, tensor<char, Device::GPU> *out);
+    void logical_not(const tensor<char, Device::GPU> *a, tensor<char, Device::GPU> *out);
 
     void equality(
         tensor<char, Device::GPU> *result,
@@ -44,9 +47,7 @@ namespace GFI {
         column::SortedSearchType operation
     );
 
-    void logical_and(const tensor<char, Device::GPU> *a, const tensor<char, Device::GPU> *b, tensor<char, Device::GPU> *out);
-    void logical_or (const tensor<char, Device::GPU> *a, const tensor<char, Device::GPU> *b, tensor<char, Device::GPU> *out);
-    void logical_not(const tensor<char, Device::GPU> *a, tensor<char, Device::GPU> *out);
+    std::vector<size_t> iterator(tensor<char, Device::GPU> *a);
 
 };
 

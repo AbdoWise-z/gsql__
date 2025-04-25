@@ -11,11 +11,33 @@
 #include "kernels/tensor_kernels.cuh"
 #include "utils/murmur_hash3_cuda.cuh"
 
+
+// Macro to check the last CUDA error and abort if one occurred
+#define CUDA_CHECK_LAST_ERROR(msg)                                  \
+    do {                                                            \
+        cudaError_t err__ = cudaGetLastError();                     \
+        if (err__ != cudaSuccess) {                                 \
+            fprintf(stderr, "CUDA error at %s:%d: %s: %s\n",        \
+                    __FILE__, __LINE__, msg,                         \
+                    cudaGetErrorString(err__));                     \
+            exit(EXIT_FAILURE);                                     \
+        }                                                           \
+    } while (0)
+
+// Macro to wrap a kernel launch (or any CUDA API call) and then check
+#define CUDA_LAUNCH_AND_CHECK(kernelLaunchCall) \
+    do {                                        \
+        kernelLaunchCall;                       \
+        CUDA_CHECK_LAST_ERROR(#kernelLaunchCall); \
+    } while (0)
+
+
 void GFI::fill(tensor<char, Device::GPU> *output_data, const char value) {
     const auto size = output_data->totalSize();
-    dim3 grid((size + Cfg::BlockDimX - 1) / (Cfg::BlockDimX));
+    dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
 
-    TensorKernel::fill_kernel<<< grid, dim3(Cfg::BlockDimX) >>>(output_data->data, value, size);
+    TensorKernel::fill_kernel<<< grid, dim3(Cfg::BlockDim) >>>(output_data->data, value, size);
+    CUDA_CHECK_LAST_ERROR("TensorKernel::fill_kernel");
 }
 
 void GFI::fill(
@@ -30,9 +52,9 @@ void GFI::fill(
     auto _shape    = static_cast<size_t*>(cu::vectorToDevice(output_data->shape));
 
     const auto size = output_data->totalSize();
-    dim3 grid((size + Cfg::BlockDimX - 1) / (Cfg::BlockDimX));
+    dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
 
-    TensorKernel::fill_kernel<<< grid, dim3(Cfg::BlockDimX) >>>(
+    TensorKernel::fill_kernel<<< grid, dim3(Cfg::BlockDim) >>>(
         output_data->data,
         output_data->totalSize(),
         value,
@@ -41,10 +63,13 @@ void GFI::fill(
         _shape,
         mask.size());
 
+    CUDA_CHECK_LAST_ERROR("TensorKernel::fill_kernel");
+
     cu::free(_position);
     cu::free(_mask);
     cu::free(_shape);
 }
+
 
 static auto columnPoolAllocator = [] (void* ptr, BufferAllocator alloc) {
     auto col = static_cast<column*>(ptr);
@@ -132,8 +157,10 @@ void GFI::equality(
 
     auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
     auto _col_2 = pool.getBufferOrCreate(static_cast<void*>(col_2), static_cast<void*>(col_2), columnPoolAllocator);
+    CUDA_CHECK_LAST_ERROR("GFI::equality pool.getBufferOrCreate columnPoolAllocator");
 
     auto _hash_table = pool.getBufferOrCreate(static_cast<void*>(&(col_2->hashed)), static_cast<void*>(col_2), columnHashPoolAllocator);
+    CUDA_CHECK_LAST_ERROR("GFI::equality pool.getBufferOrCreate columnHashPoolAllocator");
 
     auto _mask = static_cast<size_t*>(cu::vectorToDevice(mask));
     auto _tileOffset = static_cast<size_t*>(cu::vectorToDevice(tileOffset));
@@ -141,11 +168,11 @@ void GFI::equality(
 
 
     const auto size = result->totalSize();
-    dim3 grid((size + Cfg::BlockDimX - 1) / (Cfg::BlockDimX));
+    dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
 
     switch (col_1->type) {
         case INTEGER:
-            EqualityKernel::equality_kernel_int64_t<<<grid, dim3(Cfg::BlockDimX)>>>(
+            EqualityKernel::equality_kernel_int64_t<<<grid, dim3(Cfg::BlockDim)>>>(
                 result->data,
                 result->totalSize(),
                 tileOffset.size(),
@@ -170,7 +197,11 @@ void GFI::equality(
             throw std::runtime_error("Unsupported column type");
     }
 
-    TensorKernel::extend_plain_kernel<<<grid, dim3(Cfg::BlockDimX)>>>(result->data, result->totalSize(), _mask, _tileSize, mask.size());
+    CUDA_CHECK_LAST_ERROR("EqualityKernel::equality_kernel");
+
+    TensorKernel::extend_plain_kernel<<<grid, dim3(Cfg::BlockDim)>>>(result->data, result->totalSize(), _mask, _tileSize, mask.size());
+
+    CUDA_CHECK_LAST_ERROR("TensorKernel::extend_plain_kernel");
 
     cu::free(_mask);
     cu::free(_tileOffset);
@@ -205,11 +236,11 @@ void GFI::inequality(
 
 
     const auto size = result->totalSize();
-    dim3 grid((size + Cfg::BlockDimX - 1) / (Cfg::BlockDimX));
+    dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
 
     switch (col_1->type) {
         case INTEGER:
-            InequalityKernel::Inequality_kernel_int64_t<<<grid, dim3(Cfg::BlockDimX)>>>(
+            InequalityKernel::Inequality_kernel_int64_t<<<grid, dim3(Cfg::BlockDim)>>>(
                 result->data,
                 result->totalSize(),
                 tileOffset.size(),
@@ -235,7 +266,11 @@ void GFI::inequality(
             throw std::runtime_error("Unsupported column type");
     }
 
-    TensorKernel::extend_plain_kernel<<<grid, dim3(Cfg::BlockDimX)>>>(result->data, result->totalSize(), _mask, _tileSize, mask.size());
+    CUDA_CHECK_LAST_ERROR("InequalityKernel::Inequality_kernel");
+
+    TensorKernel::extend_plain_kernel<<<grid, dim3(Cfg::BlockDim)>>>(result->data, result->totalSize(), _mask, _tileSize, mask.size());
+
+    CUDA_CHECK_LAST_ERROR("TensorKernel::extend_plain_kernel");
 
     cu::free(_mask);
     cu::free(_tileOffset);
@@ -244,35 +279,144 @@ void GFI::inequality(
 
 void GFI::logical_and(const tensor<char, Device::GPU> *a, const tensor<char, Device::GPU> *b, tensor<char, Device::GPU> *out) {
     const auto size = out->totalSize();
-    dim3 grid((size + Cfg::BlockDimX - 1) / (Cfg::BlockDimX));
+    dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
 
-    TensorKernel::logical_and<<<grid, dim3(Cfg::BlockDimX)>>>(
+    TensorKernel::logical_and<<<grid, dim3(Cfg::BlockDim)>>>(
         a->data,
         b->data,
         size,
         out->data
     );
+
+    CUDA_CHECK_LAST_ERROR("TensorKernel::logical_and");
 }
 
 void GFI::logical_or(const tensor<char, Device::GPU> *a, const tensor<char, Device::GPU> *b, tensor<char, Device::GPU> *out) {
     const auto size = out->totalSize();
-    dim3 grid((size + Cfg::BlockDimX - 1) / (Cfg::BlockDimX));
+    dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
 
-    TensorKernel::logical_or<<<grid, dim3(Cfg::BlockDimX)>>>(
+    TensorKernel::logical_or<<<grid, dim3(Cfg::BlockDim)>>>(
         a->data,
         b->data,
         size,
         out->data
     );
+
+    CUDA_CHECK_LAST_ERROR("TensorKernel::logical_or");
 }
 
 void GFI::logical_not(const tensor<char, Device::GPU> *a, tensor<char, Device::GPU> *out) {
     const auto size = out->totalSize();
-    dim3 grid((size + Cfg::BlockDimX - 1) / (Cfg::BlockDimX));
+    dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
 
-    TensorKernel::logical_not<<<grid, dim3(Cfg::BlockDimX)>>>(
+    TensorKernel::logical_not<<<grid, dim3(Cfg::BlockDim)>>>(
         a->data,
         size,
         out->data
     );
+
+    CUDA_CHECK_LAST_ERROR("TensorKernel::logical_not");
+}
+
+static void run_scan(size_t* input, size_t* output, size_t n) {
+    if (n == 0) return;
+
+    size_t blocks = (n + Cfg::BlockDim * 2 - 1) / (Cfg::BlockDim * 2);
+
+    size_t *d_block_sums;
+    cudaMalloc(&d_block_sums, blocks * sizeof(size_t));
+
+    TensorKernel::efficient_prefix_sum<<<blocks, Cfg::BlockDim, (Cfg::BlockDim * 2 + 1) * sizeof(size_t)>>>(input, output, n, d_block_sums);
+    CUDA_CHECK_LAST_ERROR("TensorKernel::efficient_prefix_sum");
+
+    if (blocks > Cfg::BlockDim) {
+        auto r_v = static_cast<size_t*>(cu::malloc(blocks * sizeof(size_t)));
+        run_scan(d_block_sums, r_v, blocks);
+        CUDA_CHECK_LAST_ERROR("run_scan::recursive");
+        cu::free(d_block_sums);
+        d_block_sums = r_v;
+    } else {
+        TensorKernel::efficient_prefix_sum<<<1, Cfg::BlockDim, (Cfg::BlockDim * 2 + 1) * sizeof(size_t)>>>(d_block_sums, d_block_sums, blocks, nullptr);
+        CUDA_CHECK_LAST_ERROR("TensorKernel::efficient_prefix_sum");
+    }
+
+    if (blocks > 1) {
+        CUDA_CHECK_LAST_ERROR("TensorKernel::add_aux before");
+        TensorKernel::add_aux<<<blocks - 1, Cfg::BlockDim>>>(output, n, d_block_sums);
+        CUDA_CHECK_LAST_ERROR("TensorKernel::add_aux");
+    }
+
+    cudaFree(d_block_sums);
+}
+
+static void run_scan(char* input, size_t* output, size_t n) {
+    if (n == 0) return;
+
+    size_t blocks = (n + Cfg::BlockDim * 2 - 1) / (Cfg::BlockDim * 2);
+
+    auto d_block_sums = static_cast<size_t*>(cu::malloc(blocks * sizeof(size_t)));
+
+    TensorKernel::efficient_prefix_sum<<<blocks, Cfg::BlockDim, (Cfg::BlockDim * 2) * sizeof(size_t)>>>(input, output, n, d_block_sums);
+    CUDA_CHECK_LAST_ERROR("TensorKernel::efficient_prefix_sum");
+
+    if (blocks > Cfg::BlockDim) {
+        auto r_v = static_cast<size_t*>(cu::malloc(blocks * sizeof(size_t)));
+        run_scan(d_block_sums, r_v, blocks);
+        CUDA_CHECK_LAST_ERROR("run_scan::recursive");
+        cu::free(d_block_sums);
+        d_block_sums = r_v;
+    } else {
+        TensorKernel::efficient_prefix_sum<<<1, Cfg::BlockDim, (Cfg::BlockDim * 2) * sizeof(size_t)>>>(d_block_sums, d_block_sums, blocks, nullptr);
+        CUDA_CHECK_LAST_ERROR("TensorKernel::efficient_prefix_sum");
+    }
+
+    if (blocks > 1) {
+
+        TensorKernel::add_aux<<<blocks - 1, Cfg::BlockDim>>>(output, n, d_block_sums);
+        CUDA_CHECK_LAST_ERROR("TensorKernel::add_aux");
+    }
+
+    cu::free(d_block_sums);
+}
+
+
+std::vector<size_t> GFI::iterator(tensor<char, Device::GPU> *a) {
+    std::vector<size_t> result;
+    const auto size = a->totalSize();
+
+    auto out = static_cast<size_t*>(cu::malloc(sizeof(size_t) * size));
+
+    run_scan(a->data, out, size);
+
+    auto cpu_out = static_cast<size_t*>(malloc(sizeof(size_t) * size));
+
+    cu::toHost(out, cpu_out, sizeof(size_t) * size);
+
+    size_t prev = 0;
+
+    for (size_t i = 0;i < size;i++) {
+        auto val = cpu_out[i];
+        if (val == prev) {
+            auto low = i;
+            auto high = size;
+            while (low < high) {
+                auto mid = low + (high - low) / 2;
+                if (cpu_out[mid] == val) {
+                    low = mid + 1;
+                } else {
+                    high = mid;
+                }
+            }
+
+            i = low - 1;
+        } else {
+            result.push_back(i);
+            prev = val;
+        }
+    }
+
+    cu::free(out);
+    free(cpu_out);
+
+    return result;
 }

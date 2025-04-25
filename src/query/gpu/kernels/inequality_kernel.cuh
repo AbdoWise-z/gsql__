@@ -36,6 +36,22 @@ namespace InequalityKernel {
         column::SortedSearchType operation
     );
 
+    __device__ inline int cmp(int64_t a, int64_t b) {
+        return 1 * (a > b) + -1 * (a < b);
+    }
+
+    __device__ inline int cmp(double a, double b) {
+        return 1 * (a > b) + -1 * (a < b);
+    }
+
+    __device__ inline int cmp(const char* a, const char* b) {
+        int i = 0;
+        while (a[i] != '\0' && a[i] == b[i]) {
+            i++;
+        }
+        return 1 * (a[i] > b[i]) + -1 * (a[i] < b[i]);
+    }
+
 
     template <typename T>
     __device__ int lower_bound(const T* data, const size_t* index, int n, const T& target) {
@@ -43,7 +59,7 @@ namespace InequalityKernel {
         int high = n;
         while (low < high) {
             int mid = low + (high - low) / 2;
-            if (data[index[mid]] < target) {
+            if (cmp(data[index[mid]], target) < 0) {
                 low = mid + 1;
             } else {
                 high = mid;
@@ -58,14 +74,14 @@ namespace InequalityKernel {
         int high = n;
         while (low < high) {
             int mid = low + (high - low) / 2;
-            if (data[index[mid]] > target) {
+            if (cmp(data[index[mid]], target) > 0) {
                 high = mid;
             } else {
                 low = mid + 1;
             }
         }
 
-        if (data[low] > target) return -1;
+        if (cmp(data[low], target) > 0) return -1;
         return low;
     }
 }

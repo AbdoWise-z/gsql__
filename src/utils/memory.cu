@@ -25,5 +25,6 @@ void cu::toDevice(void *src, void *dst, size_t size) {
 }
 
 void cu::toHost(void *src, void *dst, size_t size) {
+    cudaDeviceSynchronize();
     cudaMemcpy(dst, src, size, cudaMemcpyDeviceToHost);
 }

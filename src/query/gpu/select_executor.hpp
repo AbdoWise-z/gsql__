@@ -21,13 +21,13 @@ namespace SelectExecutor::GPU {
     table* Execute(hsql::SQLStatement* statement);
 
     ConstructionResult ConstructTable(
-       tensor<char, Device::CPU>* intermediate,
+       tensor<char, Device::GPU>* intermediate,
        const std::vector<size_t>& tileSize,
        const FromResolver::GPU::ResolveResult* input
        );
 
     void AppendTable(
-       tensor<char, Device::CPU>* intermediate,
+       tensor<char, Device::GPU>* intermediate,
        const std::vector<size_t>& tileSize,
        const FromResolver::GPU::ResolveResult* input,
        const std::vector<size_t> &offset,

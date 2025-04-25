@@ -94,18 +94,18 @@ table* SelectExecutor::GPU::Execute(hsql::SQLStatement *statement) {
             tileSize
             );
 
-        auto cpu_version = intermediate->toCPU();
         if (result.result == nullptr) {
-            result = ConstructTable(&cpu_version, tileSize, &query_input);
+            result = ConstructTable(intermediate, tileSize, &query_input);
         } else {
-            AppendTable(&cpu_version, tileSize, &query_input, tile, result.result);
+            AppendTable(intermediate, tileSize, &query_input, tile, result.result);
         }
 
 
 #ifdef SELECT_DEBUG
-        std::cout << "\rProgress: " << std::dec << (++debug_current_tile) << "/" << std::dec << tiles.size();
+        std::cout << "\rProgress: " << std::dec << (++debug_current_tile) << "/" << std::dec << tiles.size() << "\t";
         std::cout.flush();
 #endif
+
         delete intermediate;
     }
 
@@ -236,11 +236,10 @@ table* SelectExecutor::GPU::Execute(hsql::SQLStatement *statement) {
 }
 
 SelectExecutor::GPU::ConstructionResult SelectExecutor::GPU::ConstructTable(
-    tensor<char, Device::CPU>* intermediate,
+    tensor<char, Device::GPU>* intermediate,
     const std::vector<size_t>& tileSize,
     const FromResolver::GPU::ResolveResult* input
     ) {
-    size_t resultSize = std::accumulate(tileSize.begin(), tileSize.end(), 1, std::multiplies<size_t>());
 
     // ReSharper disable once CppDFAMemoryLeak
     auto result = new table();
@@ -257,28 +256,26 @@ SelectExecutor::GPU::ConstructionResult SelectExecutor::GPU::ConstructTable(
         }
     }
 
-    auto iter_size = intermediate->totalSize();
-    for (size_t i = 0; i < resultSize; i++) {
-        if ((*intermediate)[i % iter_size]) {
-            auto tuple_index = ::unmap(tileSize, i);
+    auto iterator = GFI::iterator(intermediate);
+    for (auto idx: iterator) {
+        auto tuple_index = ::unmap(tileSize, idx);
 
-            bool _in_bound = true;
-            for (int m = 0;m < input->table_names.size();m++) {
-                if (input->tables[m]->size() <= tuple_index[m]) {
-                    _in_bound = false;
-                    break;
-                }
+        bool _in_bound = true;
+        for (int m = 0;m < input->table_names.size();m++) {
+            if (input->tables[m]->size() <= tuple_index[m]) {
+                _in_bound = false;
+                break;
             }
-            if (!_in_bound) continue;
+        }
+        if (!_in_bound) continue;
 
-            int j = 0;
-            for (int m = 0;m < input->tables.size();m++) {
-                const auto t = input->tables[m];
-                for (int k = 0;k < t->headers.size();k++) {
-                    auto val = t->columns[k]->data[tuple_index[m]];
-                    result->columns[j]->data.push_back(copy(val, t->columns[k]->type));
-                    j++;
-                }
+        int j = 0;
+        for (int m = 0;m < input->tables.size();m++) {
+            const auto t = input->tables[m];
+            for (int k = 0;k < t->headers.size();k++) {
+                auto val = t->columns[k]->data[tuple_index[m]];
+                result->columns[j]->data.push_back(copy(val, t->columns[k]->type));
+                j++;
             }
         }
     }
@@ -290,44 +287,38 @@ SelectExecutor::GPU::ConstructionResult SelectExecutor::GPU::ConstructTable(
 }
 
 void SelectExecutor::GPU::AppendTable(
-    tensor<char, Device::CPU> *intermediate,
-    const std::vector<size_t>& tileSize,
-    const FromResolver::GPU::ResolveResult *input,
-    const std::vector<size_t> &offset,
-    const table *result
+        tensor<char, Device::GPU> *intermediate,
+        const std::vector<size_t>& tileSize,
+        const FromResolver::GPU::ResolveResult *input,
+        const std::vector<size_t> &offset,
+        const table *result
     ) {
 
     std::vector<size_t> pos(offset.size(), 0);
+    auto iterator = GFI::iterator(intermediate);
+    for (auto idx: iterator) {
+        auto tuple_index = ::unmap(tileSize, idx);
 
-    size_t resultSize = std::accumulate(tileSize.begin(), tileSize.end(), 1, std::multiplies<size_t>());
-    auto iter_size = intermediate->totalSize();
+        for (int j = 0;j < pos.size();j++) {
+            pos[j] = offset[j] + tuple_index[j];
+        }
 
-    for (size_t i = 0; i < resultSize; i++) {
-        if ((*intermediate)[i % iter_size]) {
-
-            auto tuple_index = ::unmap(tileSize, i);
-
-            for (int j = 0;j < pos.size();j++) {
-                pos[j] = offset[j] + tuple_index[j];
+        bool _in_bound = true;
+        for (int m = 0;m < input->table_names.size();m++) {
+            if (input->tables[m]->size() <= pos[m]) {
+                _in_bound = false;
+                break;
             }
+        }
+        if (!_in_bound) continue;
 
-            bool _in_bound = true;
-            for (int m = 0;m < input->table_names.size();m++) {
-                if (input->tables[m]->size() <= pos[m]) {
-                    _in_bound = false;
-                    break;
-                }
-            }
-            if (!_in_bound) continue;
-
-            int j = 0;
-            for (int m = 0;m < input->tables.size();m++) {
-                const auto t = input->tables[m];
-                for (int k = 0;k < t->headers.size();k++) {
-                    auto val = t->columns[k]->data[pos[m]];
-                    result->columns[j]->data.push_back(copy(val, t->columns[k]->type));
-                    j++;
-                }
+        int j = 0;
+        for (int m = 0;m < input->tables.size();m++) {
+            const auto t = input->tables[m];
+            for (int k = 0;k < t->headers.size();k++) {
+                auto val = t->columns[k]->data[pos[m]];
+                result->columns[j]->data.push_back(copy(val, t->columns[k]->type));
+                j++;
             }
         }
     }

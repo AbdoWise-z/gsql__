@@ -209,6 +209,12 @@ target_compile_options(Sandbox PRIVATE ${OpenMP_CXX_FLAGS})
 # ==============================
 #
 add_executable(details src/details.cu)
+
+set_target_properties(details PROPERTIES
+        LINKER_LANGUAGE CUDA
+        CUDA_RESOLVE_DEVICE_SYMBOLS ON
+)
+
 set_source_files_properties(
         src/details.cu
         PROPERTIES LANGUAGE CUDA

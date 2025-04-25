@@ -126,9 +126,7 @@ column* column::copy() const {
 }
 
 column::~column() {
-    if (type == STRING) {
-        for (const auto i: data) {
-            delete i.s;
-        }
+    for (const auto i: data) {
+        deleteValue(i, type);
     }
 }
