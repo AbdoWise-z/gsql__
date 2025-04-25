@@ -236,13 +236,13 @@ table* SelectExecutor::CPU::Execute(hsql::SQLStatement *statement) {
 
 SelectExecutor::CPU::ConstructionResult SelectExecutor::CPU::ConstructTable(
     tensor<char, Device::CPU>* intermediate,
-    const FromResolver::CPU::ResolveResult* input
+    const FromResolver::ResolveResult* input
     ) {
     size_t resultSize = intermediate->totalSize();
 
     // ReSharper disable once CppDFAMemoryLeak
     auto result = new table();
-    std::vector<std::unordered_set<std::string>> col_source;
+    std::vector<std::set<std::string>> col_source;
 
     for (int t_idx = 0;t_idx < input->table_names.size();t_idx++) {
         const auto t = input->tables[t_idx];
@@ -289,7 +289,7 @@ SelectExecutor::CPU::ConstructionResult SelectExecutor::CPU::ConstructTable(
 
 void SelectExecutor::CPU::AppendTable(
     tensor<char, Device::CPU> *intermediate,
-    const FromResolver::CPU::ResolveResult *input,
+    const FromResolver::ResolveResult *input,
     const std::vector<size_t> &offset,
     const table *result
     ) {

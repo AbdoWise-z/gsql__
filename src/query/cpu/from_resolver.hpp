@@ -8,13 +8,10 @@
 #include <hsql/sql/Table.h>
 
 #include "db/table.hpp"
+#include "query/resolve_result.hpp"
 
 namespace FromResolver::CPU {
-    struct ResolveResult {
-        std::vector<std::unordered_set<std::string>> table_names;
-        std::vector<table*> tables;
-        std::vector<bool> isTemporary;
-    };
+    typedef ResolveResult ResolveResult; // because I don't wanna remove the GPU:: / or CPU:: prefix
 
     ResolveResult merge(ResolveResult* a, ResolveResult* b);
     int find(ResolveResult* a, std::string tname);

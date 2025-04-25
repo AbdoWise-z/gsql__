@@ -60,8 +60,8 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
             std::cout << "kExprOperator::Equals String, left=" << left->name << " & right=" << right->name << std::endl;
 #endif
             auto r = strcmp(left->name, right->name);
-            auto* result = new tensor<char, Device::GPU>({1});
-            result->set(0, r == 0 ? 1 : 0);
+            auto* result = new tensor<char, Device::GPU>(result_size);
+            result->setAll( r == 0 ? 1 : 0);
             return result;
         }
 
@@ -69,8 +69,8 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
 #ifdef OP_EQUALS_DEBUG
             std::cout << "kExprOperator::Equals Integer, left=" << left->ival << " & right=" << right->ival << std::endl;
 #endif
-            auto* result = new tensor<char, Device::GPU>({1});
-            result->set(0, left->ival == right->ival);
+            auto* result = new tensor<char, Device::GPU>(result_size);
+            result->setAll(left->ival == right->ival);
             return result;
         }
 
@@ -78,8 +78,8 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
 #ifdef OP_EQUALS_DEBUG
             std::cout << "kExprOperator::Equals Float, left=" << left->fval << " & right=" << right->fval << std::endl;
 #endif
-            auto* result = new tensor<char, Device::GPU>({1});
-            result->set(0, left->fval == right->fval);
+            auto* result = new tensor<char, Device::GPU>(result_size);
+            result->setAll(left->fval == right->fval);
             return result;
         }
 

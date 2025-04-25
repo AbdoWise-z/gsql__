@@ -14,12 +14,13 @@
 #include "agg/sum_avg_count.hpp"
 #include "db/table.hpp"
 #include "query/errors.hpp"
+#include "query/query_optimizer.hpp"
 #include "utils/konsol.hpp"
 #include "utils/string_utils.hpp"
 
 #define SELECT_DEBUG
 
-table* SelectExecutor::GPU::Execute(hsql::SQLStatement *statement) {
+table* SelectExecutor::GPU::Execute(hsql::SQLStatement *statement, TableMap& tables) {
 
     const auto* stmnt = dynamic_cast<hsql::SelectStatement*>(statement);
     if (stmnt == nullptr) {
@@ -32,92 +33,130 @@ table* SelectExecutor::GPU::Execute(hsql::SQLStatement *statement) {
     }
 
     // resolve the input
-    auto query_input = FromResolver::GPU::resolve(from);
+    auto global_query_input = FromResolver::GPU::resolve(from, tables);
 
 #ifdef SELECT_DEBUG
     std::cout << "Query: " << std::endl;
-    for (int i = 0;i < query_input.table_names.size();i++) {
-        auto k = StringUtils::join(query_input.table_names[i].begin(), query_input.table_names[i].end());
+    for (int i = 0;i < global_query_input.table_names.size();i++) {
+        auto k = StringUtils::join(global_query_input.table_names[i].begin(), global_query_input.table_names[i].end());
         k = StringUtils::limit(k, 24 * 2);
-        auto v = query_input.tables[i];
-        auto t = query_input.isTemporary[i];
+        auto v = global_query_input.tables[i];
+        auto t = global_query_input.isTemporary[i];
         std::cout << "T\t" << std::setw(24) << std::left << color(k, CYAN_FG) << "at " << std::hex << MAGENTA_FG << v << RESET_FG << "\t" << (t ? "(r)" : "") << std::endl;
     }
 #endif
 
-    auto where = stmnt->whereClause;
+    auto global_where = stmnt->whereClause;
     auto limit = stmnt->limit;
 
-    std::vector<size_t> inputSize;
-    for (auto k : query_input.tables) {
-        if (k->columns.size() > 0) {
-            inputSize.push_back(k->size());
-        } else {
-            inputSize.push_back(0);
-        }
-    }
+    auto sub_queries = QueryOptimizer::ReducePlan(QueryOptimizer::GeneratePlan(tables, stmnt));
 
-    auto tileSize = Cfg::getTileSizeFor(inputSize);
-    // apply the Where filter
+#ifdef SELECT_DEBUG
+    std::cout << "Execution Plan:" << std::endl;
+    for (int i = 0; i < sub_queries.size(); ++i) {
+        auto step = sub_queries[i];
+        std::cout << "step " << i << " -> { ";
+        int j = 0;
+        for (const auto& name: step.output_names) {
+            std::cout << name;
+            if (j++ != step.output_names.size() - 1) std::cout << ", ";
+        }
+
+        std::cout << " } where " << QueryOptimizer::exprToString(step.query) << ";" << std::endl;
+    }
+#endif
+
     ConstructionResult result {
         .result = nullptr,
         .col_source = {}
     };
 
-    auto tiles = Schedule(inputSize);
+    std::set<std::string> result_tables{};
 
-#ifdef SELECT_DEBUG
-    std::cout << "Input size: [ ";
-    for (auto i : inputSize) {
-        std::cout << std::dec << i << " ";
-    }
-    std::cout << "]" << std::endl;
-    std::cout << "Tile size: [ ";
-    for (auto i : tileSize) {
-        std::cout << std::dec << i << " ";
-    }
-    std::cout << "]" << std::endl;
-    std::cout << "Total number of tiles: " << std::dec << tiles.size() << std::endl;
-#endif
+    for (const auto& step: sub_queries) {
+        ConstructionResult local_result {
+            .result = nullptr,
+            .col_source = {}
+        };
 
-    size_t debug_current_tile = 0;
-#ifdef SELECT_DEBUG
-    std::cout << "Progress: 0/" << std::dec << tiles.size();
-    std::cout.flush();
-#endif
-    for (auto tile: tiles) {
-        auto intermediate = FilterApplier::GPU::apply(
-            &query_input,
-            where,
-            limit,
-            tile,
-            tileSize
-            );
+        auto query_input = step.input;
+        auto where = step.query;
 
-        if (result.result == nullptr) {
-            result = ConstructTable(intermediate, tileSize, &query_input);
-        } else {
-            AppendTable(intermediate, tileSize, &query_input, tile, result.result);
+        for (int i = 0; i < query_input.tables.size(); ++i) {
+            if (QueryOptimizer::intersects(query_input.table_names[i], result_tables)) {
+                query_input.tables[i] = result.result;
+                query_input.table_names[i] = QueryOptimizer::Union(result_tables, query_input.table_names[i]);
+            }
         }
 
+        std::vector<size_t> inputSize;
+        for (auto k : query_input.tables) {
+            if (!k->columns.empty()) {
+                inputSize.push_back(k->size());
+            } else {
+                inputSize.push_back(0);
+            }
+        }
+
+        auto tileSize = Cfg::getTileSizeFor(inputSize);
+        auto tiles = Schedule(inputSize);
 
 #ifdef SELECT_DEBUG
-        std::cout << "\rProgress: " << std::dec << (++debug_current_tile) << "/" << std::dec << tiles.size() << "\t";
+        std::cout << "Input size: [ ";
+        for (auto i : inputSize) {
+            std::cout << std::dec << i << " ";
+        }
+        std::cout << "]" << std::endl;
+        std::cout << "Tile size: [ ";
+        for (auto i : tileSize) {
+            std::cout << std::dec << i << " ";
+        }
+        std::cout << "]" << std::endl;
+        std::cout << "Total number of tiles: " << std::dec << tiles.size() << std::endl;
+#endif
+
+        size_t debug_current_tile = 0;
+#ifdef SELECT_DEBUG
+        std::cout << "Progress: 0/" << std::dec << tiles.size();
         std::cout.flush();
 #endif
+        for (const auto& tile: tiles) {
+            auto intermediate = FilterApplier::GPU::apply(
+                    &query_input,
+                    where,
+                    limit,
+                    tile,
+                    tileSize
+                );
 
-        delete intermediate;
-    }
+            if (local_result.result == nullptr) {
+                local_result = ConstructTable(intermediate, tileSize, &query_input);
+            } else {
+                AppendTable(intermediate, tileSize, &query_input, tile, local_result.result);
+            }
 
 #ifdef SELECT_DEBUG
-    std::cout << std::endl;
+            std::cout << "\rProgress: " << std::dec << (++debug_current_tile) << "/" << std::dec << tiles.size() << "\t";
+            std::cout.flush();
 #endif
 
+            delete intermediate;
+        }
+
+#ifdef SELECT_DEBUG
+        std::cout << std::endl;
+#endif
+
+        delete result.result;
+        result = local_result;
+        result_tables = step.output_names;
+    }
+
     // clean up any temp tables created in the process
-    for (int i = 0;i < query_input.tables.size();i++) {
+    for (int i = 0;i < global_query_input.tables.size();i++) {
         // clean up
-        if (query_input.isTemporary[i]) {
-            delete query_input.tables[i];
+        if (global_query_input.isTemporary[i]) {
+            delete global_query_input.tables[i];
         }
     }
 
@@ -238,12 +277,12 @@ table* SelectExecutor::GPU::Execute(hsql::SQLStatement *statement) {
 SelectExecutor::GPU::ConstructionResult SelectExecutor::GPU::ConstructTable(
     tensor<char, Device::GPU>* intermediate,
     const std::vector<size_t>& tileSize,
-    const FromResolver::GPU::ResolveResult* input
+    const FromResolver::ResolveResult* input
     ) {
 
     // ReSharper disable once CppDFAMemoryLeak
     auto result = new table();
-    std::vector<std::unordered_set<std::string>> col_source;
+    std::vector<std::set<std::string>> col_source;
 
     for (int t_idx = 0;t_idx < input->table_names.size();t_idx++) {
         const auto t = input->tables[t_idx];
@@ -289,7 +328,7 @@ SelectExecutor::GPU::ConstructionResult SelectExecutor::GPU::ConstructTable(
 void SelectExecutor::GPU::AppendTable(
         tensor<char, Device::GPU> *intermediate,
         const std::vector<size_t>& tileSize,
-        const FromResolver::GPU::ResolveResult *input,
+        const FromResolver::ResolveResult *input,
         const std::vector<size_t> &offset,
         const table *result
     ) {

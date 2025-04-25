@@ -11,7 +11,7 @@
 #include "store.hpp"
 #include "query/errors.hpp"
 
-FromResolver::CPU::ResolveResult FromResolver::CPU::merge(ResolveResult *a, ResolveResult *b) {
+FromResolver::ResolveResult FromResolver::CPU::merge(ResolveResult *a, ResolveResult *b) {
     ResolveResult result;
     for (int i = 0;i < a->table_names.size();i++) { // add a normally
         auto names = a->table_names[i];
@@ -54,8 +54,8 @@ int FromResolver::CPU::find(ResolveResult *a, std::string tname) {
     return -1;
 }
 
-FromResolver::CPU::ResolveResult FromResolver::CPU::resolve(hsql::TableRef * ref) {
-    std::vector<std::unordered_set<std::string>> table_names;
+FromResolver::ResolveResult FromResolver::CPU::resolve(hsql::TableRef * ref) {
+    std::vector<std::set<std::string>> table_names;
     std::vector<table*> table_values;
     std::vector<bool> temporary_table;
 
@@ -112,7 +112,7 @@ FromResolver::CPU::ResolveResult FromResolver::CPU::resolve(hsql::TableRef * ref
         auto result = SelectExecutor::CPU::ConstructTable(tensor, &merged);
         delete tensor;
 
-        std::unordered_set<std::string> final_result;
+        std::set<std::string> final_result;
         for (auto names: merged.table_names) {
             for (auto name: names) {
                 final_result.insert(name);

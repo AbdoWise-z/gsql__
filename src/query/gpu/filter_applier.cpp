@@ -35,8 +35,8 @@ tensor<char, Device::GPU>* FilterApplier::GPU::apply(
     }
 
     if (eval == nullptr) { // pass all
-        auto* result = new tensor<char, Device::GPU>({1});
-        result->set(0, 1);
+        auto* result = new tensor<char, Device::GPU>(result_size);
+        result->setAll(1);
         return result;
     }
 

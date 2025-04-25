@@ -9,27 +9,28 @@
 #include <hsql/sql/SQLStatement.h>
 
 #include "from_resolver.hpp"
+#include "store.hpp"
 #include "tensor/tensor.hpp"
 #include "db/table.hpp"
 
 namespace SelectExecutor::GPU {
     struct ConstructionResult {
         table* result;
-        std::vector<std::unordered_set<std::string>> col_source;
+        std::vector<std::set<std::string>> col_source;
     };
 
-    table* Execute(hsql::SQLStatement* statement);
+    table* Execute(hsql::SQLStatement* statement, TableMap& tables);
 
     ConstructionResult ConstructTable(
        tensor<char, Device::GPU>* intermediate,
        const std::vector<size_t>& tileSize,
-       const FromResolver::GPU::ResolveResult* input
+       const FromResolver::ResolveResult* input
        );
 
     void AppendTable(
        tensor<char, Device::GPU>* intermediate,
        const std::vector<size_t>& tileSize,
-       const FromResolver::GPU::ResolveResult* input,
+       const FromResolver::ResolveResult* input,
        const std::vector<size_t> &offset,
        const table* result
        );

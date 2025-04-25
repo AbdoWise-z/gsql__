@@ -129,6 +129,9 @@ set(SOURCES
 
         src/query/gpu/kernels/inequality_kernel.cu
         src/query/gpu/kernels/inequality_kernel.cuh
+
+        src/query/query_optimizer.cpp
+        src/query/query_optimizer.hpp
 )
 
 #
@@ -139,6 +142,9 @@ set(SOURCES
 add_executable(gsql__
         src/main.cpp
         ${SOURCES}
+        src/query/resolve_result.hpp
+        src/query/query_optimizer.cpp
+        src/query/query_optimizer.hpp
 )
 
 set_target_properties(gsql__ PROPERTIES

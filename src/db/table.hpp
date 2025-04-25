@@ -14,10 +14,11 @@
 
 class table {
 public:
-    std::vector<std::string> headers;
+    std::vector<std::string>  headers;
     std::vector<column*>      columns;
 
     table();
+    table(std::vector<std::string>, std::vector<column*>);
 
     void setHeaders(std::vector<std::string> headers, const std::vector<DataType> &data_types);
     void addRecord(std::vector<tval> record);

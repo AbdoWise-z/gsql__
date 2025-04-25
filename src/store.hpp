@@ -42,7 +42,9 @@
     } \
 })()
 
-extern std::unordered_map<std::string, table*> global_tables;
+typedef std::unordered_map<std::string, table*> TableMap;
+
+extern TableMap global_tables;
 
 namespace Cfg {
     extern size_t HashTableExtendableSize;

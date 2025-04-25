@@ -16,6 +16,11 @@ table::table() {
     columns = {};
 }
 
+table::table(std::vector<std::string> heads, std::vector<column *> cols) {
+    headers = heads;
+    columns = cols;
+}
+
 void table::setHeaders(std::vector<std::string> headers, const std::vector<DataType> &data_types) {
     if (headers.size() != data_types.size()) {
         throw std::invalid_argument("header size != data_types size");

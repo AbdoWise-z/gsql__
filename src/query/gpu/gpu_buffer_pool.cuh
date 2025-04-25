@@ -35,8 +35,8 @@ public:
 
 private:
     struct BufferInfo {
-        size_t                      size;
-        void*                       gpuPtr;
+        size_t                      size{};
+        void*                       gpuPtr{};
         std::list<void*>::iterator  lruIt;
     };
 

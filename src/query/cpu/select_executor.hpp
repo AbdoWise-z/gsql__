@@ -15,19 +15,19 @@
 namespace SelectExecutor::CPU {
     struct ConstructionResult {
         table* result;
-        std::vector<std::unordered_set<std::string>> col_source;
+        std::vector<std::set<std::string>> col_source;
     };
 
     table* Execute(hsql::SQLStatement* statement);
 
     ConstructionResult ConstructTable(
        tensor<char, Device::CPU>* intermediate,
-       const FromResolver::CPU::ResolveResult* input
+       const FromResolver::ResolveResult* input
        );
 
     void AppendTable(
        tensor<char, Device::CPU>* intermediate,
-       const FromResolver::CPU::ResolveResult* input,
+       const FromResolver::ResolveResult* input,
        const std::vector<size_t> &offset,
        const table* result
        );

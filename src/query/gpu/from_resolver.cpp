@@ -11,7 +11,7 @@
 #include "store.hpp"
 #include "query/errors.hpp"
 
-FromResolver::GPU::ResolveResult FromResolver::GPU::merge(ResolveResult *a, ResolveResult *b) {
+FromResolver::ResolveResult FromResolver::GPU::merge(ResolveResult *a, ResolveResult *b) {
     ResolveResult result;
     for (int i = 0;i < a->table_names.size();i++) { // add a normally
         auto names = a->table_names[i];
@@ -54,8 +54,8 @@ int FromResolver::GPU::find(ResolveResult *a, std::string tname) {
     return -1;
 }
 
-FromResolver::GPU::ResolveResult FromResolver::GPU::resolve(hsql::TableRef * ref) {
-    std::vector<std::unordered_set<std::string>> table_names;
+FromResolver::ResolveResult FromResolver::GPU::resolve(hsql::TableRef * ref, TableMap& tables) {
+    std::vector<std::set<std::string>> table_names;
     std::vector<table*> table_values;
     std::vector<bool> temporary_table;
 
@@ -63,7 +63,7 @@ FromResolver::GPU::ResolveResult FromResolver::GPU::resolve(hsql::TableRef * ref
         std::string name = ref->name;
         std::string t_name = ref->name;
 
-        if (!global_tables.contains(name)) {
+        if (!tables.contains(name)) {
             throw NoSuchTableError(name);
         }
 
@@ -72,7 +72,7 @@ FromResolver::GPU::ResolveResult FromResolver::GPU::resolve(hsql::TableRef * ref
         }
 
         table_names.push_back({t_name});
-        table_values.push_back(global_tables[name]);
+        table_values.push_back(tables[name]);
         temporary_table.push_back(false);
 
     } else if (ref->type == hsql::kTableSelect) {
@@ -80,12 +80,12 @@ FromResolver::GPU::ResolveResult FromResolver::GPU::resolve(hsql::TableRef * ref
             throw std::runtime_error("Invalid table reference");
 
         table_names.push_back({ref->alias->name});
-        table_values.push_back(SelectExecutor::GPU::Execute(ref->select));
+        table_values.push_back(SelectExecutor::GPU::Execute(ref->select, tables));
         temporary_table.push_back(true);
 
     } else if (ref->type == hsql::kTableCrossProduct) {
         for (auto tableName: *(ref->list)) { // execute each sub-import alone and return the final result
-            auto result = FromResolver::GPU::resolve(tableName);
+            auto result = FromResolver::GPU::resolve(tableName, tables);
             for (int i = 0;i < result.table_names.size();i++) {
                 auto names = result.table_names[i];
                 auto table = result.tables[i];
@@ -103,12 +103,12 @@ FromResolver::GPU::ResolveResult FromResolver::GPU::resolve(hsql::TableRef * ref
     } else if (ref->type == hsql::kTableJoin) {
         // auto join = ref->join;
         //
-        // auto left = FromResolver::GPU::resolve(join->left);
-        // auto right = FromResolver::GPU::resolve(join->right);
+        // auto left   = FromResolver::GPU::resolve(join->left);
+        // auto right  = FromResolver::GPU::resolve(join->right);
         // auto merged = FromResolver::GPU::merge(&left, &right);
         //
         // auto tensor = FilterApplier::GPU::apply(&merged, join->condition, nullptr);
-        // auto result = SelectExecutor::GPU::ConstructTable(tensor->toCPU(), &merged);
+        // auto result = SelectExecutor::GPU::ConstructTable(tensor, &merged);
         // delete tensor;
         //
         // std::unordered_set<std::string> final_result;
