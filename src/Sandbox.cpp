@@ -331,4 +331,6 @@ int main() {
 
         std::cout << " } where " << exprToString(step.query) << ";" << std::endl;
     }
+
+    std::cout << (int) 'A' << std::endl;
 }

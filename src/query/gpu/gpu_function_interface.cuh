@@ -74,6 +74,22 @@ namespace GFI {
         column::SortedSearchType operation
     );
 
+    tval max(
+        column *col_1
+    );
+
+    tval min(
+        column *col_1
+    );
+
+    tval sum(
+        column *col_1
+    );
+
+    tval avg(
+        column *col_1
+    );
+
     std::vector<size_t> iterator(tensor<char, Device::GPU> *a);
 
 };

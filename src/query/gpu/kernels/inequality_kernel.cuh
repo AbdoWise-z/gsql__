@@ -53,7 +53,7 @@ namespace InequalityKernel {
             i++;
         }
 
-        return 1 * (a[i] < b[i]) + -1 * (a[i] > b[i]); // A < B so reverse
+        return 1 * (a[i] > b[i]) + -1 * (a[i] < b[i]);
     }
 
     __device__ inline int cmp(const dateTime& a, const dateTime& b) {

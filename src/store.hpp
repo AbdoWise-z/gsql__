@@ -12,6 +12,8 @@
 #include <iostream>
 #include <type_traits>
 
+#define MAX_BLOCK_SIZE 512
+
 #define time_it(call) \
 ([&]() -> decltype(call) { \
     using namespace std::chrono; \

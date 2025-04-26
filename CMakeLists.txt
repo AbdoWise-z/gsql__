@@ -145,6 +145,10 @@ add_executable(gsql__
         src/query/resolve_result.hpp
         src/query/query_optimizer.cpp
         src/query/query_optimizer.hpp
+        src/query/gpu/kernels/reduce_kernels.cu
+        src/query/gpu/kernels/reduce_kernels.cuh
+        src/query/gpu/kernels/helper_kernels.cu
+        src/query/gpu/kernels/helper_kernels.cuh
 )
 
 set_target_properties(gsql__ PROPERTIES

@@ -7,7 +7,9 @@
 #include "gpu_buffer_pool.cuh"
 #include "store.hpp"
 #include "kernels/equality_kernel.cuh"
+#include "kernels/helper_kernels.cuh"
 #include "kernels/inequality_kernel.cuh"
+#include "kernels/reduce_kernels.cuh"
 #include "kernels/tensor_kernels.cuh"
 #include "utils/murmur_hash3_cuda.cuh"
 
@@ -850,6 +852,161 @@ void GFI::inequality(tensor<char, Device::GPU> *result, column *col_1, tval valu
     cu::free(_tileOffset);
     cu::free(_tileSize);
     cu::free(_sVal);
+}
+
+template<typename T, typename __rf>
+static T run_reducer(T* input, size_t n, __rf func) {
+    if (n == 0) return static_cast<T>(0);
+    size_t blocks = (n + Cfg::BlockDim * 2 - 1) / (Cfg::BlockDim * 2);
+
+    T *d_block_sums = static_cast<T*>(cu::malloc(blocks * sizeof(T)));
+    func<<<blocks, Cfg::BlockDim, (Cfg::BlockDim * 2) * sizeof(T)>>>(input, n, d_block_sums);
+    CUDA_CHECK_LAST_ERROR("run_reducer::Reducer_Func");
+
+    T result;
+
+    if (blocks > Cfg::BlockDim * 2) {
+        result = run_reducer<T, __rf>(d_block_sums, blocks, func);
+        CUDA_CHECK_LAST_ERROR("run_reducer::recursive");
+    } else {
+        T* final = static_cast<T*>(cu::malloc(sizeof(T)));
+        func<<<1, Cfg::BlockDim, (Cfg::BlockDim * 2) * sizeof(T)>>>(d_block_sums, blocks, final);
+        CUDA_CHECK_LAST_ERROR("run_reducer::Reducer_Func (internal)");
+        cu::toHost(final, &result, sizeof(T));
+    }
+
+    cu::free(d_block_sums);
+    return result;
+}
+
+tval GFI::max(column *col_1) {
+    auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
+    CUDA_CHECK_LAST_ERROR("GFI::equality pool.getBufferOrCreate columnPoolAllocator");
+
+    const char* devPtr = nullptr;
+
+    size_t* devSizePtr = static_cast<size_t *> (cu::malloc(sizeof(size_t)));
+    size_t* hostSizePtr = static_cast<size_t *> (malloc(sizeof(size_t)));
+    char* hostPtr = nullptr;
+
+    tval result;
+    switch (col_1->type) {
+        case INTEGER:
+            result = ValuesHelper::create_from(run_reducer(static_cast<int64_t*>(_col_1), col_1->data.size(), ReduceKernel::max<int64_t>));
+            break;
+        case FLOAT:
+            result = ValuesHelper::create_from(run_reducer(static_cast<double*>(_col_1), col_1->data.size(), ReduceKernel::max<double>));
+            break;
+        case DateTime:
+            result = ValuesHelper::create_from(run_reducer(static_cast<dateTime*>(_col_1), col_1->data.size(), ReduceKernel::max<dateTime>));
+            break;
+        case STRING:
+            devPtr  = run_reducer(static_cast<const char**>(_col_1), col_1->data.size(), ReduceKernel::max<const char*>);
+            HelperKernels::strlen<<<1, 1>>>(devPtr, devSizePtr);
+            cudaDeviceSynchronize();
+            cu::toHost(devSizePtr, hostSizePtr, sizeof(size_t));
+            hostPtr = static_cast<char*>(malloc(hostSizePtr[0] + 1));
+            cu::toHost(devPtr, hostPtr, hostSizePtr[0]);
+            hostPtr[hostSizePtr[0]] = '\0';
+            result = ValuesHelper::create_from(hostPtr);
+            break;
+        default:
+            throw std::runtime_error("Unsupported column type");
+    }
+
+    cu::free(devSizePtr);
+    free(hostSizePtr);
+    free(hostPtr);
+    return result;
+}
+
+tval GFI::min(column *col_1) {
+    auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
+    CUDA_CHECK_LAST_ERROR("GFI::equality pool.getBufferOrCreate columnPoolAllocator");
+
+    const char* devPtr = nullptr;
+
+    size_t* devSizePtr = static_cast<size_t *> (cu::malloc(sizeof(size_t)));
+    size_t* hostSizePtr = static_cast<size_t *> (malloc(sizeof(size_t)));
+    char* hostPtr = nullptr;
+
+    tval result;
+    switch (col_1->type) {
+        case INTEGER:
+            result = ValuesHelper::create_from(run_reducer(static_cast<int64_t*>(_col_1), col_1->data.size(), ReduceKernel::min<int64_t>));
+            break;
+        case FLOAT:
+            result = ValuesHelper::create_from(run_reducer(static_cast<double*>(_col_1), col_1->data.size(), ReduceKernel::min<double>));
+            break;
+        case DateTime:
+            result = ValuesHelper::create_from(run_reducer(static_cast<dateTime*>(_col_1), col_1->data.size(), ReduceKernel::min<dateTime>));
+            break;
+        case STRING:
+            devPtr  = run_reducer(static_cast<const char**>(_col_1), col_1->data.size(), ReduceKernel::min<const char*>);
+            HelperKernels::strlen<<<1, 1>>>(devPtr, devSizePtr);
+            cudaDeviceSynchronize();
+            cu::toHost(devSizePtr, hostSizePtr, sizeof(size_t));
+            hostPtr = static_cast<char*>(malloc(hostSizePtr[0] + 1));
+            cu::toHost(devPtr, hostPtr, hostSizePtr[0]);
+            hostPtr[hostSizePtr[0]] = '\0';
+            result = ValuesHelper::create_from(hostPtr);
+            break;
+        default:
+            throw std::runtime_error("Unsupported column type");
+    }
+
+    cu::free(devSizePtr);
+    free(hostSizePtr);
+    free(hostPtr);
+    return result;
+}
+
+tval GFI::sum(column *col_1) {
+    if (col_1->type == STRING) throw std::runtime_error("Unsupported column type");
+
+    auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
+    CUDA_CHECK_LAST_ERROR("GFI::equality pool.getBufferOrCreate columnPoolAllocator");
+
+    tval result;
+    switch (col_1->type) {
+        case INTEGER:
+            result = ValuesHelper::create_from(run_reducer(static_cast<int64_t*>(_col_1), col_1->data.size(), ReduceKernel::sum<int64_t>));
+        break;
+        case FLOAT:
+            result = ValuesHelper::create_from(run_reducer(static_cast<double*>(_col_1), col_1->data.size(), ReduceKernel::sum<double>));
+        break;
+        case DateTime:
+            result = ValuesHelper::create_from(run_reducer(static_cast<dateTime*>(_col_1), col_1->data.size(), ReduceKernel::sum<dateTime>));
+        break;
+        default:
+            throw std::runtime_error("Unsupported column type");
+    }
+
+    return result;
+}
+
+tval GFI::avg(column *col_1) {
+    auto _s = sum(col_1);
+    switch (col_1->type) {
+        case INTEGER:
+            _s.i = _s.i / col_1->data.size();
+            break;
+        case FLOAT:
+            _s.d = _s.d / col_1->data.size();
+            break;
+        case DateTime:
+            _s.t->day = _s.t->day / col_1->data.size();
+            _s.t->month = _s.t->month / col_1->data.size();
+            _s.t->year = _s.t->year / col_1->data.size();
+            _s.t->hour = _s.t->hour / col_1->data.size();
+            _s.t->minute = _s.t->minute / col_1->data.size();
+            _s.t->second = _s.t->second / col_1->data.size();
+            break;
+        default:
+            break;
+    }
+
+    return _s;
 }
 
 void GFI::logical_and(const tensor<char, Device::GPU> *a, const tensor<char, Device::GPU> *b, tensor<char, Device::GPU> *out) {
