@@ -226,10 +226,9 @@ namespace QueryOptimizer {
         return result;
     }
 
-    std::vector<ExecutionStep> GeneratePlan(TableMap db, const hsql::SelectStatement* query) {
+    std::vector<ExecutionStep> GeneratePlan(FromResolver::ResolveResult inputs, const hsql::SelectStatement* query) {
 
         auto sub_wheres = GeneratePlan(query->whereClause);
-        auto inputs = FromResolver::GPU::resolve(query->fromTable, db);
         std::vector<ExecutionStep> steps;
 
         if (!query->whereClause) {

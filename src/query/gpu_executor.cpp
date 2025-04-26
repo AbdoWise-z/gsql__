@@ -15,7 +15,7 @@
 static table* statementExecutor(hsql::SQLStatement* statement, TableMap& tables) {
     switch (statement->type()) {
         case hsql::kStmtSelect:
-            return SelectExecutor::GPU::Execute(statement, tables);
+            return SelectExecutor::GPU::Execute(statement, tables).second;
         default:
             throw UnsupportedOperationError(statement->type());
     }

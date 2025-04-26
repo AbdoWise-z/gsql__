@@ -80,7 +80,7 @@ FromResolver::ResolveResult FromResolver::GPU::resolve(hsql::TableRef * ref, Tab
             throw std::runtime_error("Invalid table reference");
 
         table_names.push_back({ref->alias->name});
-        table_values.push_back(SelectExecutor::GPU::Execute(ref->select, tables));
+        table_values.push_back(SelectExecutor::GPU::Execute(ref->select, tables).second);
         temporary_table.push_back(true);
 
     } else if (ref->type == hsql::kTableCrossProduct) {
@@ -101,35 +101,22 @@ FromResolver::ResolveResult FromResolver::GPU::resolve(hsql::TableRef * ref, Tab
             }
         }
     } else if (ref->type == hsql::kTableJoin) {
-        // auto join = ref->join;
-        //
-        // auto left   = FromResolver::GPU::resolve(join->left);
-        // auto right  = FromResolver::GPU::resolve(join->right);
-        // auto merged = FromResolver::GPU::merge(&left, &right);
-        //
-        // auto tensor = FilterApplier::GPU::apply(&merged, join->condition, nullptr);
-        // auto result = SelectExecutor::GPU::ConstructTable(tensor, &merged);
-        // delete tensor;
-        //
-        // std::unordered_set<std::string> final_result;
-        // for (auto names: merged.table_names) {
-        //     for (auto name: names) {
-        //         final_result.insert(name);
-        //     }
-        // }
-        //
-        // for (int i = 0;i < merged.tables.size();i++) {
-        //     // clean up
-        //     if (merged.isTemporary[i]) {
-        //         delete merged.tables[i];
-        //     }
-        // }
-        //
-        //
-        // table_names.push_back(final_result);
-        // table_values.push_back(result.result);
-        // temporary_table.push_back(true);
-        throw std::runtime_error("Joins with tiling needs a rework.");
+        auto join = ref->join;
+
+        auto select = new hsql::SelectStatement();
+        select->fromTable = new hsql::TableRef(hsql::kTableCrossProduct);
+        select->fromTable->list = new std::vector<hsql::TableRef*>();
+        select->fromTable->list->push_back(join->left);
+        select->fromTable->list->push_back(join->right);
+        select->selectList = new std::vector<hsql::Expr*>();
+        select->selectList->push_back(new hsql::Expr(hsql::kExprStar));
+        select->whereClause = join->condition;
+
+        auto result = SelectExecutor::GPU::Execute(select, tables);
+
+        table_names.push_back(result.first);
+        table_values.push_back(result.second);
+        temporary_table.push_back(true);
     } else {
         throw std::runtime_error("Unknown \"from\" type.");
     }

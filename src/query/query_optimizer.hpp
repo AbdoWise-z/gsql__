@@ -43,7 +43,7 @@ namespace QueryOptimizer {
 
     FromResolver::GPU::ResolveResult constructSubInput(FromResolver::GPU::ResolveResult& r, hsql::Expr* where);
 
-    std::vector<ExecutionStep> GeneratePlan(TableMap db, const hsql::SelectStatement* query);
+    std::vector<ExecutionStep> GeneratePlan(FromResolver::ResolveResult inputs, const hsql::SelectStatement* query);
 
     inline bool isSubSet(const std::set<std::string>&a, const std::set<std::string>&b) {
         if (a.size() > b.size()) return false;

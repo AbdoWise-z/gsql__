@@ -65,7 +65,7 @@ inline std::string fcolor(const std::string &text, const std::string &color) {
 }
 
 inline std::string bcolor(const std::string &text, const std::string &color) {
-    return color + text + RESET_FG;
+    return color + text + RESET_BG;
 }
 
 inline std::string color(const std::string &text, const std::string &color) {

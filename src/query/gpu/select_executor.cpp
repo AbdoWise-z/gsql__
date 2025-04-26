@@ -20,7 +20,7 @@
 
 #define SELECT_DEBUG
 
-table* SelectExecutor::GPU::Execute(hsql::SQLStatement *statement, TableMap& tables) {
+std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLStatement *statement, TableMap& tables) {
 
     const auto* stmnt = dynamic_cast<hsql::SelectStatement*>(statement);
     if (stmnt == nullptr) {
@@ -39,30 +39,30 @@ table* SelectExecutor::GPU::Execute(hsql::SQLStatement *statement, TableMap& tab
     std::cout << "Query: " << std::endl;
     for (int i = 0;i < global_query_input.table_names.size();i++) {
         auto k = StringUtils::join(global_query_input.table_names[i].begin(), global_query_input.table_names[i].end());
-        k = StringUtils::limit(k, 24 * 2);
+        k = StringUtils::limit(k, 42 * 2);
         auto v = global_query_input.tables[i];
         auto t = global_query_input.isTemporary[i];
-        std::cout << "T\t" << std::setw(24) << std::left << color(k, CYAN_FG) << "at " << std::hex << MAGENTA_FG << v << RESET_FG << "\t" << (t ? "(r)" : "") << std::endl;
+        std::cout << "T\t" << std::setw(42) << std::left << color(k, CYAN_FG) << "at " << std::hex << MAGENTA_FG << v << RESET_FG << "\t" << (t ? "(r)" : "") << std::endl;
     }
 #endif
 
     auto global_where = stmnt->whereClause;
     auto limit = stmnt->limit;
 
-    auto sub_queries = QueryOptimizer::ReducePlan(QueryOptimizer::GeneratePlan(tables, stmnt));
+    auto sub_queries = QueryOptimizer::ReducePlan(QueryOptimizer::GeneratePlan(global_query_input, stmnt));
 
 #ifdef SELECT_DEBUG
     std::cout << "Execution Plan:" << std::endl;
     for (int i = 0; i < sub_queries.size(); ++i) {
         auto step = sub_queries[i];
-        std::cout << "step " << i << " -> { ";
+        std::cout << "\t" << color( std::to_string(i), BLUE_FG) << " -> { ";
         int j = 0;
         for (const auto& name: step.output_names) {
-            std::cout << name;
+            std::cout << color(name, YELLOW_FG);
             if (j++ != step.output_names.size() - 1) std::cout << ", ";
         }
 
-        std::cout << " } where " << QueryOptimizer::exprToString(step.query) << ";" << std::endl;
+        std::cout << " } where " << fcolor(QueryOptimizer::exprToString(step.query), MAGENTA_FG) << ";" << std::endl;
     }
 #endif
 
@@ -271,7 +271,7 @@ table* SelectExecutor::GPU::Execute(hsql::SQLStatement *statement, TableMap& tab
 
     // there is no memory leak .. the IDE is tripping.
     // ReSharper disable once CppDFAMemoryLeak
-    return final_result;
+    return {result_tables, final_result};
 }
 
 SelectExecutor::GPU::ConstructionResult SelectExecutor::GPU::ConstructTable(
