@@ -351,7 +351,7 @@ int main() {
 
     CLI cli(sql);
     cli.addCommand("load", loadTable);
-    cli.addCommand("add",    removeTable);
+    cli.addCommand("add",    loadTable);
     cli.addCommand("remove", removeTable);
     cli.addCommand("details", show_details);
     cli.addCommand("editor", editor);
