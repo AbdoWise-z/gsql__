@@ -75,6 +75,7 @@ static auto columnPoolAllocator = [] (void* ptr, BufferAllocator alloc) {
     auto col = static_cast<column*>(ptr);
     auto size = col->data.size();
     void* gpuPtr = 0;
+    std::vector<dateTime> dateTimeData(0);
     switch (col->type) {
         case INTEGER:
             gpuPtr = alloc(size * sizeof(int64_t));
@@ -86,16 +87,46 @@ static auto columnPoolAllocator = [] (void* ptr, BufferAllocator alloc) {
             cu::toDevice(col->data.data(), gpuPtr, size * sizeof(double));
             size = size * sizeof(double);
             break;
+        case DateTime:
+            gpuPtr = alloc(size * sizeof(dateTime));
+            dateTimeData = std::vector<dateTime>(size); // fk switch
+            for (size_t i = 0; i < size; ++i) {
+                dateTimeData[i] = *col->data[i].t;
+            }
+            cu::toDevice(dateTimeData.data(), gpuPtr, size * sizeof(dateTime));
+            size = size * sizeof(dateTime);
+            break;
         case STRING:
-            // TODO: Handle string data
+            gpuPtr = alloc(size * sizeof(void**));
+            for (size_t i = 0; i < size; ++i) {
+                std::string* str = col->data[i].s;
+                auto gpu_str = alloc(str->size() + 1);
+                cu::toDevice(str->c_str(), gpu_str, str->size() + 1);
+                static_cast<void**>(gpuPtr)[i] = gpu_str;
+            }
         default:
             throw std::runtime_error("Unsupported column type");
 
     }
-    return std::make_pair(size, gpuPtr);
+
+    auto result = std::make_tuple(size, gpuPtr, [=] () {
+        // free function
+        if (col->type == STRING) {
+            for (size_t i = 0; i < size; ++i) {
+                auto gpu_str = static_cast<void**>(gpuPtr)[i];
+                if (gpu_str != nullptr) {
+                    cu::free(gpu_str);
+                }
+            }
+        } else {
+            cu::free(gpuPtr);
+        }
+    });
+
+    return result;
 };
 
-static auto columnIndexPoolAllocator = [] (void* ptr, BufferAllocator alloc) {
+static auto columnIndexPoolAllocator = [] (void* ptr, const BufferAllocator& alloc) {
     auto col = static_cast<column*>(ptr);
     auto index_table = col->sorted;
     auto size = index_table.size();
@@ -110,7 +141,7 @@ static auto columnIndexPoolAllocator = [] (void* ptr, BufferAllocator alloc) {
     return std::make_pair(size * sizeof(size_t), gpuPtr);
 };
 
-static auto columnHashPoolAllocator = [] (void* ptr, BufferAllocator alloc) {
+static auto columnHashPoolAllocator = [] (void* ptr, const BufferAllocator& alloc) {
     auto col = static_cast<column*>(ptr);
     auto hash_table = col->hashed;
     auto size = hash_table.size();
@@ -155,50 +186,208 @@ void GFI::equality(
         std::vector<size_t> mask
     ) {
 
+    if (col_1->type != col_2->type) {
+        throw std::runtime_error("Column types must be same");
+    }
+
     auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
     auto _col_2 = pool.getBufferOrCreate(static_cast<void*>(col_2), static_cast<void*>(col_2), columnPoolAllocator);
     CUDA_CHECK_LAST_ERROR("GFI::equality pool.getBufferOrCreate columnPoolAllocator");
 
-    auto _hash_table = pool.getBufferOrCreate(static_cast<void*>(&(col_2->hashed)), static_cast<void*>(col_2), columnHashPoolAllocator);
-    CUDA_CHECK_LAST_ERROR("GFI::equality pool.getBufferOrCreate columnHashPoolAllocator");
+    void* _hash_table = nullptr;
+    if (col_2->isHashIndexed()) {
+        _hash_table = pool.getBufferOrCreate(static_cast<void*>(&(col_2->hashed)), static_cast<void*>(col_2), columnHashPoolAllocator);
+        CUDA_CHECK_LAST_ERROR("GFI::equality pool.getBufferOrCreate columnHashPoolAllocator");
+    }
 
     auto _mask = static_cast<size_t*>(cu::vectorToDevice(mask));
     auto _tileOffset = static_cast<size_t*>(cu::vectorToDevice(tileOffset));
     auto _tileSize = static_cast<size_t*>(cu::vectorToDevice(tileSize));
 
+    if (_hash_table) {
+        const auto size = tileSize[table_1_index];
+        dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
+
+        switch (col_1->type) {
+            case INTEGER:
+                EqualityKernel::equality_kernel<<<grid, dim3(Cfg::BlockDim)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<int64_t*>(_col_1),
+                    static_cast<int64_t*>(_col_2),
+                    col_1->data.size(),
+                    col_2->data.size(),
+
+                    static_cast<size_t*>(_hash_table), // hash table
+                    col_2->hashExSize, // hash ext size
+
+                    _mask,
+                    table_1_index,
+                    table_2_index,
+
+                    _tileSize,
+                    _tileOffset
+                    );
+            break;
+            case FLOAT:
+                EqualityKernel::equality_kernel<<<grid, dim3(Cfg::BlockDim)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<double*>(_col_1),
+                    static_cast<double*>(_col_2),
+                    col_1->data.size(),
+                    col_2->data.size(),
+
+                    static_cast<size_t*>(_hash_table), // hash table
+                    col_2->hashExSize, // hash ext size
+
+                    _mask,
+                    table_1_index,
+                    table_2_index,
+
+                    _tileSize,
+                    _tileOffset
+                    );
+            break;
+            case STRING:
+                EqualityKernel::equality_kernel<<<grid, dim3(Cfg::BlockDim)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<const char**>(_col_1),
+                    static_cast<const char**>(_col_2),
+                    col_1->data.size(),
+                    col_2->data.size(),
+
+                    static_cast<size_t*>(_hash_table), // hash table
+                    col_2->hashExSize, // hash ext size
+
+                    _mask,
+                    table_1_index,
+                    table_2_index,
+
+                    _tileSize,
+                    _tileOffset
+                    );
+            break;
+            case DateTime:
+                EqualityKernel::equality_kernel<<<grid, dim3(Cfg::BlockDim)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<dateTime*>(_col_1),
+                    static_cast<dateTime*>(_col_2),
+                    col_1->data.size(),
+                    col_2->data.size(),
+
+                    static_cast<size_t*>(_hash_table), // hash table
+                    col_2->hashExSize, // hash ext size
+
+                    _mask,
+                    table_1_index,
+                    table_2_index,
+
+                    _tileSize,
+                    _tileOffset
+                    );
+            break;
+            default:
+                throw std::runtime_error("Unsupported column type");
+        }
+    } else {
+        dim3 grid((tileSize[table_1_index] + Cfg::BlockDim2D - 1) / (Cfg::BlockDim2D), (tileSize[table_2_index] + Cfg::BlockDim2D - 1) / (Cfg::BlockDim2D));
+
+        switch (col_1->type) {
+            case INTEGER:
+                EqualityKernel::equality_kernel<<<grid, dim3(Cfg::BlockDim2D, Cfg::BlockDim2D)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<int64_t*>(_col_1),
+                    static_cast<int64_t*>(_col_2),
+                    col_1->data.size(),
+                    col_2->data.size(),
+
+                    _mask,
+                    table_1_index,
+                    table_2_index,
+
+                    _tileSize,
+                    _tileOffset
+                    );
+            break;
+            case FLOAT:
+                EqualityKernel::equality_kernel<<<grid, dim3(Cfg::BlockDim2D, Cfg::BlockDim2D)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<double*>(_col_1),
+                    static_cast<double*>(_col_2),
+                    col_1->data.size(),
+                    col_2->data.size(),
+
+                    _mask,
+                    table_1_index,
+                    table_2_index,
+
+                    _tileSize,
+                    _tileOffset
+                    );
+            break;
+            case STRING:
+                EqualityKernel::equality_kernel<<<grid, dim3(Cfg::BlockDim2D, Cfg::BlockDim2D)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<const char**>(_col_1),
+                    static_cast<const char**>(_col_2),
+                    col_1->data.size(),
+                    col_2->data.size(),
+
+                    _mask,
+                    table_1_index,
+                    table_2_index,
+
+                    _tileSize,
+                    _tileOffset
+                    );
+            break;
+            case DateTime:
+                EqualityKernel::equality_kernel<<<grid, dim3(Cfg::BlockDim2D, Cfg::BlockDim2D)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<dateTime*>(_col_1),
+                    static_cast<dateTime*>(_col_2),
+                    col_1->data.size(),
+                    col_2->data.size(),
+
+                    _mask,
+                    table_1_index,
+                    table_2_index,
+
+                    _tileSize,
+                    _tileOffset
+                    );
+            break;
+            default:
+                throw std::runtime_error("Unsupported column type");
+        }
+    }
+    CUDA_CHECK_LAST_ERROR("EqualityKernel::equality_kernel");
 
     const auto size = result->totalSize();
     dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
-
-    switch (col_1->type) {
-        case INTEGER:
-            EqualityKernel::equality_kernel_int64_t<<<grid, dim3(Cfg::BlockDim)>>>(
-                result->data,
-                result->totalSize(),
-                tileOffset.size(),
-
-                static_cast<int64_t*>(_col_1),
-                static_cast<int64_t*>(_col_2),
-                col_1->data.size(),
-                col_2->data.size(),
-
-                static_cast<size_t*>(_hash_table), // hash table
-                col_2->hashExSize, // hash ext size
-
-                _mask,
-                table_1_index,
-                table_2_index,
-
-                _tileSize,
-                _tileOffset
-                );
-            break;
-        default:
-            throw std::runtime_error("Unsupported column type");
-    }
-
-    CUDA_CHECK_LAST_ERROR("EqualityKernel::equality_kernel");
-
     TensorKernel::extend_plain_kernel<<<grid, dim3(Cfg::BlockDim)>>>(result->data, result->totalSize(), _mask, _tileSize, mask.size());
 
     CUDA_CHECK_LAST_ERROR("TensorKernel::extend_plain_kernel");
@@ -227,47 +416,210 @@ void GFI::inequality(
 
     auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
     auto _col_2 = pool.getBufferOrCreate(static_cast<void*>(col_2), static_cast<void*>(col_2), columnPoolAllocator);
+    CUDA_CHECK_LAST_ERROR("GFI::equality pool.getBufferOrCreate columnPoolAllocator");
 
-    auto _index_table = pool.getBufferOrCreate(static_cast<void*>(&(col_2->sorted)), static_cast<void*>(col_2), columnIndexPoolAllocator);
+    void* _index_table = nullptr;
+    if (col_2->isSortIndexed()) {
+        _index_table = pool.getBufferOrCreate(static_cast<void*>(&(col_2->sorted)), static_cast<void*>(col_2), columnIndexPoolAllocator);
+        CUDA_CHECK_LAST_ERROR("GFI::equality pool.getBufferOrCreate columnIndexPoolAllocator");
+    }
 
     auto _mask = static_cast<size_t*>(cu::vectorToDevice(mask));
     auto _tileOffset = static_cast<size_t*>(cu::vectorToDevice(tileOffset));
     auto _tileSize = static_cast<size_t*>(cu::vectorToDevice(tileSize));
 
+    if (_index_table) {
+        const auto size = tileSize[table_1_index];
+        dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
+
+        switch (col_1->type) {
+            case INTEGER:
+                InequalityKernel::inequality_kernel<<<grid, dim3(Cfg::BlockDim)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<int64_t*>(_col_1),
+                    static_cast<int64_t*>(_col_2),
+                    col_1->data.size(),
+                    col_2->data.size(),
+
+                    static_cast<size_t*>(_index_table),
+
+                    _mask,
+                    table_1_index,
+                    table_2_index,
+
+                    _tileSize,
+                    _tileOffset,
+
+                    operation
+                );
+            break;
+            case FLOAT:
+                InequalityKernel::inequality_kernel<<<grid, dim3(Cfg::BlockDim)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<double*>(_col_1),
+                    static_cast<double*>(_col_2),
+                    col_1->data.size(),
+                    col_2->data.size(),
+
+                    static_cast<size_t*>(_index_table),
+
+                    _mask,
+                    table_1_index,
+                    table_2_index,
+
+                    _tileSize,
+                    _tileOffset,
+
+                    operation
+                );
+            break;
+            case STRING:
+                InequalityKernel::inequality_kernel<<<grid, dim3(Cfg::BlockDim)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<char**>(_col_1),
+                    static_cast<char**>(_col_2),
+                    col_1->data.size(),
+                    col_2->data.size(),
+
+                    static_cast<size_t*>(_index_table),
+
+                    _mask,
+                    table_1_index,
+                    table_2_index,
+
+                    _tileSize,
+                    _tileOffset,
+
+                    operation
+                );
+            break;
+            case DateTime:
+                InequalityKernel::inequality_kernel<<<grid, dim3(Cfg::BlockDim)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<dateTime*>(_col_1),
+                    static_cast<dateTime*>(_col_2),
+                    col_1->data.size(),
+                    col_2->data.size(),
+
+                    static_cast<size_t*>(_index_table),
+
+                    _mask,
+                    table_1_index,
+                    table_2_index,
+
+                    _tileSize,
+                    _tileOffset,
+
+                    operation
+                );
+            break;
+            default:
+                throw std::runtime_error("Unsupported column type");
+        }
+    } else {
+        dim3 grid((tileSize[table_1_index] + Cfg::BlockDim2D - 1) / (Cfg::BlockDim2D), (tileSize[table_2_index] + Cfg::BlockDim2D - 1) / (Cfg::BlockDim2D));
+
+        switch (col_1->type) {
+            case INTEGER:
+                InequalityKernel::inequality_kernel<<<grid, dim3(Cfg::BlockDim2D, Cfg::BlockDim2D)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<int64_t*>(_col_1),
+                    static_cast<int64_t*>(_col_2),
+                    col_1->data.size(),
+                    col_2->data.size(),
+
+                    _mask,
+                    table_1_index,
+                    table_2_index,
+
+                    _tileSize,
+                    _tileOffset,
+                    operation
+                    );
+            break;
+            case FLOAT:
+                InequalityKernel::inequality_kernel<<<grid, dim3(Cfg::BlockDim2D, Cfg::BlockDim2D)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<double*>(_col_1),
+                    static_cast<double*>(_col_2),
+                    col_1->data.size(),
+                    col_2->data.size(),
+
+                    _mask,
+                    table_1_index,
+                    table_2_index,
+
+                    _tileSize,
+                    _tileOffset,
+                    operation
+                    );
+            break;
+            case STRING:
+                InequalityKernel::inequality_kernel<<<grid, dim3(Cfg::BlockDim2D, Cfg::BlockDim2D)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<const char**>(_col_1),
+                    static_cast<const char**>(_col_2),
+                    col_1->data.size(),
+                    col_2->data.size(),
+
+                    _mask,
+                    table_1_index,
+                    table_2_index,
+
+                    _tileSize,
+                    _tileOffset,
+                    operation
+                    );
+            break;
+            case DateTime:
+                InequalityKernel::inequality_kernel<<<grid, dim3(Cfg::BlockDim2D, Cfg::BlockDim2D)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<dateTime*>(_col_1),
+                    static_cast<dateTime*>(_col_2),
+                    col_1->data.size(),
+                    col_2->data.size(),
+
+                    _mask,
+                    table_1_index,
+                    table_2_index,
+
+                    _tileSize,
+                    _tileOffset,
+                    operation
+                    );
+            break;
+            default:
+                throw std::runtime_error("Unsupported column type");
+        }
+    }
+    CUDA_CHECK_LAST_ERROR("EqualityKernel::equality_kernel");
 
     const auto size = result->totalSize();
     dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
-
-    switch (col_1->type) {
-        case INTEGER:
-            InequalityKernel::Inequality_kernel_int64_t<<<grid, dim3(Cfg::BlockDim)>>>(
-                result->data,
-                result->totalSize(),
-                tileOffset.size(),
-
-                static_cast<int64_t*>(_col_1),
-                static_cast<int64_t*>(_col_2),
-                col_1->data.size(),
-                col_2->data.size(),
-
-                static_cast<size_t*>(_index_table),
-
-                _mask,
-                table_1_index,
-                table_2_index,
-
-                _tileSize,
-                _tileOffset,
-
-                operation
-                );
-        break;
-        default:
-            throw std::runtime_error("Unsupported column type");
-    }
-
-    CUDA_CHECK_LAST_ERROR("InequalityKernel::Inequality_kernel");
-
     TensorKernel::extend_plain_kernel<<<grid, dim3(Cfg::BlockDim)>>>(result->data, result->totalSize(), _mask, _tileSize, mask.size());
 
     CUDA_CHECK_LAST_ERROR("TensorKernel::extend_plain_kernel");

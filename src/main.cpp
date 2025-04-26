@@ -22,10 +22,12 @@ namespace fs = std::filesystem;
 
 
 void loadTable(std::vector<std::string> params) {
-    std::string path_str = "";
-    for (std::string param : params) {
-        path_str += param;
+    if (params.empty() || params.size() > 2) {
+        std::cout << "Usage: load [path] [alias]" << std::endl;
+        return;
     }
+
+    const std::string& path_str = params[0];
 
     fs::path p(path_str);
 
@@ -35,6 +37,10 @@ void loadTable(std::vector<std::string> params) {
     }
 
     std::string name = p.filename();
+    if (params.size() == 2) {
+        name = params[1];
+    }
+
     name = name.substr(0, name.find_last_of('.'));
     if (global_tables.find(name) != global_tables.end()) {
         std::cout << "table with the same name already exists" << std::endl;
@@ -76,14 +82,13 @@ void show_details(std::vector<std::string> params) {
 }
 
 void show_table(std::vector<std::string> params) {
-    if (params.size() != 3) {
+    if (params.empty() || params.size() > 3) {
         std::cout << "Usage: show [table] [start-row] [count]" << std::endl;
         return;
     }
 
-    auto name = params[0];
-    auto start = stoi(params[1]);
-    auto count = stoi(params[2]);
+    const auto& name = params[0];
+    auto start = 0;
 
     // print the header
     std::vector<size_t> w;
@@ -94,6 +99,14 @@ void show_table(std::vector<std::string> params) {
     }
 
     auto table = global_tables[name];
+
+    auto count = table->size();
+
+    if (params.size() == 3) {
+        start = stoi(params[1]);
+        count = stoi(params[2]);
+    }
+
     for (int i = 0;i < table->headers.size();i++) {
         switch (table->columns[i]->type) {
             case STRING:
@@ -109,7 +122,7 @@ void show_table(std::vector<std::string> params) {
                 w.push_back(30);
         }
 
-        count = std::min(count, static_cast<int>(table->columns[i]->data.size()) - start);
+        count = std::min(count, static_cast<size_t>(table->columns[i]->data.size()) - start);
 
         std::cout << "";
         std::cout << std::setw(w[i]) << std::left << color(table->headers[i], GREEN_FG) << "|";

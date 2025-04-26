@@ -20,6 +20,16 @@
 
 #define SELECT_DEBUG
 
+static inline bool shouldDelete(FromResolver::ResolveResult r, table* t) {
+    for (int i = 0;i < r.tables.size();i++) {
+        if (r.tables[i] == t) {
+            return r.isTemporary[i];
+        }
+    }
+
+    return true; // not in the input so it was created by us
+}
+
 std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLStatement *statement, TableMap& tables) {
 
     const auto* stmnt = dynamic_cast<hsql::SelectStatement*>(statement);
@@ -87,6 +97,22 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
                 query_input.tables[i] = result.result;
                 query_input.table_names[i] = QueryOptimizer::Union(result_tables, query_input.table_names[i]);
             }
+        }
+
+        if (where == nullptr && query_input.tables.size() == 1) {
+            // no where clause, just pass the table
+            local_result.result = query_input.tables[0];
+            local_result.col_source = {};
+            for (const auto& h: local_result.result->headers) {
+                local_result.col_source.push_back(query_input.table_names[0]);
+            }
+
+            auto prev_ptr = result.result;
+            if (::shouldDelete(global_query_input, prev_ptr)) delete prev_ptr;
+
+            result = local_result;
+            result_tables.insert(query_input.table_names[0].begin(), query_input.table_names[0].end());
+            continue;
         }
 
         std::vector<size_t> inputSize;
@@ -207,7 +233,7 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
             }
 
             auto param = (*params)[0];
-            if (param->type != hsql::kExprColumnRef) {
+            if (param->type != hsql::kExprColumnRef && param->type != hsql::kExprStar) {
                 throw UnsupportedOperationError("Only functions such as count, max, sum, avg are supported with one param (column name)");
             }
 
@@ -217,57 +243,78 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
                 throw TableSizeMismatch();
             }
 
-            std::string col_name = param->name;
-            std::string table_name;
+            if (param->type == hsql::kExprStar) {
 
-            if (param->table != nullptr) {
-                table_name = param->table; // limit to specific table
-            }
+                std::string alias;
+                if (expr->alias) {
+                    alias = expr->alias;
+                } else {
+                    throw UnsupportedOperationError("Alias is required for aggregate functions");
+                }
 
-            auto idx = getColumn(&result, table_name, col_name);
-            if (idx == -1) {
-                throw NoSuchColumnError(table_name + "." + col_name);
-            } else if (idx == -2) {
-                throw NoSuchTableError(table_name);
-            }
+                final_result->headers.push_back(alias);
 
-            std::string alias = result.result->headers[idx];
-            if (expr->alias) {
-                alias = expr->alias;
-            }
-            final_result->headers.push_back(alias);
-
-            auto col = result.result->columns[idx];
-            // now we apply the actual function ..
-            std::string func_name = expr->name;
-
-            if (func_name == "sum") {
-                final_result->columns.push_back(new column());
-                final_result->columns.back()->type = col->type;
-                final_result->columns.back()->data.push_back(Agg::GPU::sum(col));
-            } else if (func_name == "count") {
-                final_result->columns.push_back(new column());
-                final_result->columns.back()->type = INTEGER;
-                final_result->columns.back()->data.push_back(Agg::GPU::count(col));
-            } else if (func_name == "avg") {
-                final_result->columns.push_back(new column());
-                final_result->columns.back()->type = FLOAT;
-                final_result->columns.back()->data.push_back(Agg::GPU::avg(col));
-            } else if (func_name == "min") {
-                final_result->columns.push_back(new column());
-                final_result->columns.back()->type = col->type;
-                final_result->columns.back()->data.push_back(Agg::GPU::min(col));
-            } else if (func_name == "max") {
-                final_result->columns.push_back(new column());
-                final_result->columns.back()->type = col->type;
-                final_result->columns.back()->data.push_back(Agg::GPU::max(col));
+                std::string func_name = expr->name;
+                if (StringUtils::equalsIgnoreCase(func_name, "count")) {
+                    final_result->columns.push_back(new column());
+                    final_result->columns.back()->type = INTEGER;
+                    final_result->columns.back()->data.push_back(Agg::GPU::count(result.result));
+                } else {
+                    throw UnsupportedOperationError(func_name + "(table) not supported");
+                }
             } else {
-                throw UnsupportedOperationError("Function not supported");
+                std::string col_name = param->name;
+                std::string table_name;
+
+                if (param->table != nullptr) {
+                    table_name = param->table; // limit to specific table
+                }
+
+                auto idx = getColumn(&result, table_name, col_name);
+                if (idx == -1) {
+                    throw NoSuchColumnError(table_name + "." + col_name);
+                } else if (idx == -2) {
+                    throw NoSuchTableError(table_name);
+                }
+
+                std::string alias = result.result->headers[idx];
+                if (expr->alias) {
+                    alias = expr->alias;
+                }
+                final_result->headers.push_back(alias);
+
+                auto col = result.result->columns[idx];
+                // now we apply the actual function ..
+                std::string func_name = expr->name;
+
+                if (StringUtils::equalsIgnoreCase(func_name, "sum")) {
+                    final_result->columns.push_back(new column());
+                    final_result->columns.back()->type = col->type;
+                    final_result->columns.back()->data.push_back(Agg::GPU::sum(col));
+                } else if (StringUtils::equalsIgnoreCase(func_name, "avg")) {
+                    final_result->columns.push_back(new column());
+                    final_result->columns.back()->type = FLOAT;
+                    final_result->columns.back()->data.push_back(Agg::GPU::avg(col));
+                } else if (StringUtils::equalsIgnoreCase(func_name, "min")) {
+                    final_result->columns.push_back(new column());
+                    final_result->columns.back()->type = col->type;
+                    final_result->columns.back()->data.push_back(Agg::GPU::min(col));
+                } else if (StringUtils::equalsIgnoreCase(func_name, "max")) {
+                    final_result->columns.push_back(new column());
+                    final_result->columns.back()->type = col->type;
+                    final_result->columns.back()->data.push_back(Agg::GPU::max(col));
+                } else if (StringUtils::equalsIgnoreCase(func_name, "count")) {
+                    final_result->columns.push_back(new column());
+                    final_result->columns.back()->type = INTEGER;
+                    final_result->columns.back()->data.push_back(Agg::GPU::count(col));
+                } else {
+                    throw UnsupportedOperationError(func_name + "(col) not supported");
+                }
             }
         }
     }
 
-    delete result.result;
+    if (::shouldDelete(global_query_input, result.result)) delete result.result;
 
     // there is no memory leak .. the IDE is tripping.
     // ReSharper disable once CppDFAMemoryLeak

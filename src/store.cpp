@@ -14,6 +14,8 @@ namespace Cfg {
 
     size_t BlockDim = 256;
 
+    size_t BlockDim2D = 16;
+
     size_t maxGPUMemory = 1024 * 1024 * 1024; // 1 GB
 
     size_t useAccelerator = 1;

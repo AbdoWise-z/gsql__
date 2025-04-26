@@ -10,6 +10,7 @@
 #include <list>
 
 typedef std::function<void*(size_t)> BufferAllocator;
+typedef std::function<void()> VoidFunction;
 
 // A simple LRU GPU buffer cache & pool
 class GpuBufferPool {
@@ -27,6 +28,13 @@ public:
         std::function<std::pair<size_t, void*>(void*, BufferAllocator)> alloc
     );
 
+    void* getBufferOrCreate(
+        void* ptr,
+        void* data,
+        std::function<std::tuple<size_t, void*, VoidFunction>(void*, BufferAllocator)> alloc
+    );
+
+
     // Immediately free & remove the buffer for key “ptr”.
     void  releaseBuffer(void* ptr);
 
@@ -35,9 +43,10 @@ public:
 
 private:
     struct BufferInfo {
-        size_t                      size{};
+        size_t                        size{};
         void*                       gpuPtr{};
-        std::list<void*>::iterator  lruIt;
+        VoidFunction              freeFunc{};
+        std::list<void*>::iterator     lruIt;
     };
 
     size_t                                 m_maxMemory;

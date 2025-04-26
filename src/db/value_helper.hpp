@@ -7,7 +7,9 @@
 
 #include <cstdint>
 #include <csv.hpp>
+#include <optional>
 #include <string>
+#include <bits/regex.h>
 
 #include "typing.hpp"
 #include "utils/murmur_hash3.hpp"
@@ -65,5 +67,6 @@ void deleteValue(tval, DataType);
 
 std::string to_string(tval, DataType);
 
+std::optional<dateTime> parseDateTime(const std::string& input);
 
 #endif //VALUE_HELPER_HPP

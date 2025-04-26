@@ -25,6 +25,8 @@ GpuBufferPool::~GpuBufferPool() {
     }
 }
 
+
+
 //----------------------------------------------------------------------------------------------------------------------
 // setMaxMemory
 //----------------------------------------------------------------------------------------------------------------------
@@ -36,7 +38,10 @@ void GpuBufferPool::setMaxMemory(size_t bytes) {
         auto info = m_map[evictKey];
         m_lruList.pop_back();
         m_currentMemory -= info.size;
-        cudaFree(info.gpuPtr);
+
+        if (!info.freeFunc) cu::free(info.gpuPtr);
+        else info.freeFunc();
+
         m_map.erase(evictKey);
     }
 }
@@ -44,12 +49,8 @@ void GpuBufferPool::setMaxMemory(size_t bytes) {
 //----------------------------------------------------------------------------------------------------------------------
 // getBufferOrCreate
 //----------------------------------------------------------------------------------------------------------------------
-void* GpuBufferPool::getBufferOrCreate(
-    void* ptr,
-    void* data,
-    std::function<std::pair<size_t, void*>(void*, BufferAllocator)> alloc
-) {
-    // --- CACHE HIT? ---
+void * GpuBufferPool::getBufferOrCreate(void *ptr, void *data,
+    std::function<std::pair<size_t, void *>(void *, BufferAllocator)> alloc) {
     auto it = m_map.find(ptr);
     if (it != m_map.end()) {
         // Move to front of LRU
@@ -70,7 +71,10 @@ void* GpuBufferPool::getBufferOrCreate(
         auto info = m_map[evictKey];
         m_lruList.pop_back();
         m_currentMemory -= info.size;
-        cu::free(info.gpuPtr);
+
+        if (!info.freeFunc) cu::free(info.gpuPtr);
+        else info.freeFunc();
+
         m_map.erase(evictKey);
     }
 
@@ -82,7 +86,53 @@ void* GpuBufferPool::getBufferOrCreate(
 
     // --- INSERT NEW ENTRY ---
     m_lruList.push_front(ptr);
-    BufferInfo bi{ bufSize, gpuPtr, m_lruList.begin() };
+    BufferInfo bi{ bufSize, gpuPtr, nullptr, m_lruList.begin() };
+    m_map[ptr] = bi;
+    m_currentMemory += bufSize;
+
+    return gpuPtr;
+}
+
+void* GpuBufferPool::getBufferOrCreate(
+    void* ptr,
+    void* data,
+    std::function<std::tuple<size_t, void*, VoidFunction>(void*, BufferAllocator)> alloc
+) {
+    // --- CACHE HIT? ---
+    auto it = m_map.find(ptr);
+    if (it != m_map.end()) {
+        // Move to front of LRU
+        m_lruList.erase(it->second.lruIt);
+        m_lruList.push_front(ptr);
+        it->second.lruIt = m_lruList.begin();
+        return it->second.gpuPtr;
+    }
+
+    // --- CACHE MISS: ALLOCATE ---
+    // User‐provided alloc returns (bufferSize, gpuPtr)
+    auto [bufSize, gpuPtr, freeFunc] = alloc(data, cu::malloc);
+
+    // --- EVICT AS NEEDED ---
+    // Pop back until we have room
+    while (m_currentMemory + bufSize > m_maxMemory && !m_lruList.empty()) {
+        void* evictKey = m_lruList.back();
+        auto info = m_map[evictKey];
+        m_lruList.pop_back();
+        m_currentMemory -= info.size;
+        if (!info.freeFunc) cu::free(info.gpuPtr);
+        else info.freeFunc();
+        m_map.erase(evictKey);
+    }
+
+    // If the single buffer is larger than the entire cache, bail out
+    if (bufSize > m_maxMemory) {
+        cu::free(gpuPtr);
+        throw std::runtime_error("Requested buffer exceeds maximum cache size");
+    }
+
+    // --- INSERT NEW ENTRY ---
+    m_lruList.push_front(ptr);
+    BufferInfo bi{ bufSize, gpuPtr, freeFunc, m_lruList.begin() };
     m_map[ptr] = bi;
     m_currentMemory += bufSize;
 
@@ -97,7 +147,9 @@ void GpuBufferPool::releaseBuffer(void* ptr) {
     if (it == m_map.end()) return;
 
     // Free GPU memory and remove from LRU + map
-    cudaFree(it->second.gpuPtr);
+    if (!it->second.freeFunc) cu::free(it->second.gpuPtr);
+    else it->second.freeFunc();
+
     m_currentMemory -= it->second.size;
     m_lruList.erase(it->second.lruIt);
     m_map.erase(it);

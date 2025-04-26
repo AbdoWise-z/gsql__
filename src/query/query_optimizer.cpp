@@ -4,6 +4,8 @@
 
 #include "query_optimizer.hpp"
 
+#include "errors.hpp"
+
 
 namespace QueryOptimizer {
     std::string opTypeString(hsql::OperatorType operator_) {
@@ -160,7 +162,7 @@ namespace QueryOptimizer {
         }
 
         if (where->type == hsql::kExprColumnRef) {
-            std::string ref = where->table;
+            std::string ref = where->table ? where->table : "";
             std::string col = where->name;
 
             if (ref.empty()) {
@@ -207,20 +209,30 @@ namespace QueryOptimizer {
         hsql::Expr* where) {
         auto req = getRequiredTables(r, where);
 
-        std::unordered_map<table*, std::set<std::string>> inverse_tables;
-        for (const auto i: req) {
-            const auto table_ptr = r.tables[FromResolver::GPU::find(&r, i)];
-            if (!inverse_tables.contains(table_ptr)) {
-                inverse_tables[table_ptr] = std::set<std::string>();
-            }
-
-            inverse_tables[table_ptr].insert(i);
-        }
+        // std::unordered_map<table*, std::set<std::string>> inverse_tables;
+        // for (const auto i: req) {
+        //     const auto table_ptr = r.tables[FromResolver::GPU::find(&r, i)];
+        //     if (!inverse_tables.contains(table_ptr)) {
+        //         inverse_tables[table_ptr] = std::set<std::string>();
+        //     }
+        //
+        //     inverse_tables[table_ptr].insert(i);
+        // }
+        //
+        // FromResolver::ResolveResult result;
+        // for (const auto& [k, v] : inverse_tables) {
+        //     result.table_names.push_back(v);
+        //     result.tables.push_back(k);
+        // }
 
         FromResolver::ResolveResult result;
-        for (const auto& [k, v] : inverse_tables) {
-            result.table_names.push_back(v);
-            result.tables.push_back(k);
+        for (const auto& i : req) {
+            auto idx = FromResolver::GPU::find(&r, i);
+            if (idx == -1) {
+                throw NoSuchTableError(i);
+            }
+            result.table_names.push_back({i});
+            result.tables.push_back(r.tables[idx]);
         }
 
         return result;

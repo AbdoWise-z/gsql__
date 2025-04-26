@@ -20,11 +20,11 @@ void cu::free(void *ptr) {
     cudaFree(ptr);
 }
 
-void cu::toDevice(void *src, void *dst, size_t size) {
+void cu::toDevice(const void *src, void *dst, size_t size) {
     cudaMemcpy(dst, src, size, cudaMemcpyHostToDevice);
 }
 
-void cu::toHost(void *src, void *dst, size_t size) {
+void cu::toHost(const void *src, void *dst, size_t size) {
     cudaDeviceSynchronize();
     cudaMemcpy(dst, src, size, cudaMemcpyDeviceToHost);
 }

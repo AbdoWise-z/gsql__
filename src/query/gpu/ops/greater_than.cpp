@@ -39,6 +39,7 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
     if (!tile_start.empty()) result_offset = tile_start;
 
     auto* result = new tensor<char, Device::GPU>(result_size);
+    result->setAll(0);
 
     if (left->isLiteral() && right->isLiteral()) {
 #ifdef OP_GREATER_DEBUG
@@ -48,7 +49,6 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
         if (left->type != right->type) {
             // we know they can't be equal if they can't be the same type (unless they are float and int)
             // fixme: handle case where they are float or int
-            result->setAll(0);
 #ifdef OP_GREATER_DEBUG
             std::cout << "kExprOperator::Greater type mismatch" << std::endl;
 #endif
@@ -59,6 +59,7 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
 #ifdef OP_GREATER_DEBUG
             std::cout << "kExprOperator::Greater String, left=" << left->name << " & right=" << right->name << std::endl;
 #endif
+
             auto r = strcmp(left->name, right->name);
             result->setAll(r > 0 ? 1 : 0);
             return result;
@@ -157,8 +158,6 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
                 }
             }
 
-            result->setAll(0);
-
             tval value;
             if (column_ptr->type == STRING)
                 value = create_from(literal->name);
@@ -194,8 +193,6 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
                     mask.push_back(1);
                 }
             }
-
-            result->setAll(0);
 
             if (column_ptr->type == STRING) {
 #ifdef OP_GREATER_DEBUG
@@ -310,22 +307,6 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
         throw std::invalid_argument("Type mismatch between two columns");
     }
 
-    // now we have the two columns
-    // we need to implement the search logic
-    if (!column_ptr_l->isSortIndexed() && !column_ptr_r->isSortIndexed()) {
-#ifdef OP_GREATER_DEBUG
-        std::cout << "kExprOperator::Greater no sorted index, building ... ";
-#endif
-        if (column_ptr_r->data.size() > column_ptr_l->data.size()) {
-            column_ptr_r->buildSortedIndexes();
-        } else {
-            column_ptr_l->buildSortedIndexes();
-        }
-#ifdef OP_GREATER_DEBUG
-        std::cout << "Done" << std::endl;;
-#endif
-    }
-
     std::vector<uint64_t> mask;
     std::vector<size_t> hyperplane_pos;
     int table_index_l = 0;
@@ -342,44 +323,51 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
             mask.push_back(1);
         }
     }
-    result->setAll(0);
 
-    // now do the search
-    auto sorted = column_ptr_r;
-    auto other = column_ptr_l;
-    auto sorted_index = table_index_r;
-    auto other_index = table_index_l;
-    if (!sorted->isSortIndexed()) {
-        sorted = column_ptr_l;
-        other = column_ptr_r;
-        sorted_index = table_index_l;
-        other_index = table_index_r;
+    // now we have the two columns
+    // we need to implement the search logic
+    if (!column_ptr_l->isSortIndexed() && !column_ptr_r->isSortIndexed()) {
+#ifdef OP_GREATER_DEBUG
+        std::cout << "kExprOperator::Greater no sorted index, using 2D ";
+#endif
+        GFI::inequality(
+            result,
+            column_ptr_l,
+            column_ptr_r,
+            tile_start,
+            tile_size,
+            table_index_l,
+            table_index_r,
+            mask,
+            column::SST_GT
+        );
+
+        return result;
+    } else {
+        // now do the search
+        auto sorted = column_ptr_r;
+        auto other = column_ptr_l;
+        auto sorted_index = table_index_r;
+        auto other_index = table_index_l;
+        if (!sorted->isSortIndexed()) {
+            sorted = column_ptr_l;
+            other = column_ptr_r;
+            sorted_index = table_index_l;
+            other_index = table_index_r;
+        }
+
+        GFI::inequality(
+            result,
+            other,
+            sorted,
+            tile_start,
+            tile_size,
+            other_index,
+            sorted_index,
+            mask,
+            other_index == table_index_l ? column::SST_GT : column::SST_LT
+        );
+
+        return result;
     }
-
-    GFI::inequality(
-        result,
-        other,
-        sorted,
-        tile_start,
-        tile_size,
-        other_index,
-        sorted_index,
-        mask,
-        other_index == table_index_l ? column::SST_GT : column::SST_LT
-    );
-
-    // for (int i = result_offset[other_index];i < result_offset[other_index] + result_size[other_index];i++) {
-    //     auto matches = sorted->sortSearch(other->data[i], other_index == table_index_l ? column::SST_GT : column::SST_LT);
-    //     hyperplane_pos[other_index] = i - result_offset[other_index];
-    //     for (auto match: matches) {
-    //         if (match < result_offset[hashed_index] || match >= result_offset[hashed_index] + result_size[hashed_index]) {
-    //             continue;
-    //         }
-    //
-    //         hyperplane_pos[hashed_index] = match;
-    //         result->fill(1, hyperplane_pos, mask);
-    //     }
-    // }
-
-    return result;
 }

@@ -24,6 +24,7 @@
         const auto _ms_ = duration_cast<milliseconds>(_time_it_duration_); \
         const auto _ns_ = duration_cast<nanoseconds>(_time_it_duration_); \
         std::cout << #call << " Executed in: " \
+                  << std::dec \
                   << _sec_.count() << " seconds, " \
                   << _ms_.count() % 1000 << " ms, " \
                   << _ns_.count() % 1000000 << " ns." << std::endl; \
@@ -35,6 +36,7 @@
         const auto _ms_ = duration_cast<milliseconds>(_time_it_duration_); \
         const auto _ns_ = duration_cast<nanoseconds>(_time_it_duration_); \
         std::cout << #call << " Executed in: " \
+                  << std::dec \
                   << _sec_.count() << " seconds, " \
                   << _ms_.count() % 1000  << " ms, " \
                   << _ns_.count() % 1000000 << " ns." << std::endl; \
@@ -52,6 +54,7 @@ namespace Cfg {
     extern size_t maxTensorElements;
 
     extern size_t BlockDim;
+    extern size_t BlockDim2D;
 
     extern size_t maxGPUMemory;
 

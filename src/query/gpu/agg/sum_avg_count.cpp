@@ -63,3 +63,7 @@ tval Agg::GPU::avg(column *col) {
 tval Agg::GPU::count(const column *col) {
     return create_from(static_cast<int64_t>(col->data.size()));
 }
+
+tval Agg::GPU::count(const table *t) {
+    return create_from(static_cast<int64_t>(t->size()));
+}

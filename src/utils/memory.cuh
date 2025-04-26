@@ -12,8 +12,8 @@
 namespace cu {
     void* malloc(size_t size);
     void free(void* ptr);
-    void toDevice(void* src, void* dst, size_t size);
-    void toHost(void* src, void* dst, size_t size);
+    void toDevice(const void* src, void* dst, size_t size);
+    void toHost(const void* src, void* dst, size_t size);
 
     template<typename T>
     void* vectorToDevice(std::vector<T> &vec) {
