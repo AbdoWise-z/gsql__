@@ -93,6 +93,10 @@ static std::string exprToString(const hsql::Expr* expr) {
             os << "NULL";
             break;
         }
+        case hsql::kExprLiteralDate: {
+            std::cout << "Date time";
+            os << expr->name;
+        }
         default: {
             // Fallback: if we have a raw name, print it
             if (strlen(expr->name)) {
@@ -213,11 +217,11 @@ FromResolver::GPU::ResolveResult constructSubInput(
     hsql::Expr* where) {
     auto req = getRequiredTables(r, where);
 
-    std::unordered_map<table*, std::unordered_set<std::string>> inverse_tables;
+    std::unordered_map<table*, std::set<std::string>> inverse_tables;
     for (const auto i: req) {
         const auto table_ptr = r.tables[FromResolver::GPU::find(&r, i)];
         if (!inverse_tables.contains(table_ptr)) {
-            inverse_tables[table_ptr] = std::unordered_set<std::string>();
+            inverse_tables[table_ptr] = std::set<std::string>();
         }
 
         inverse_tables[table_ptr].insert(i);
@@ -293,10 +297,10 @@ std::vector<ExecutionStep> ReducePlan(std::vector<ExecutionStep>& before_steps) 
 
 
 int main() {
-    std::string query = "Select * from a as a, b as b, c as c where c.c3 = 15 and a.c1 = b.c1 and b.c2 = c.c2";
+    std::string query = "Select * from a as a, b as b, c as c where c.c3 = 15 and a.c1 = b.c1 and b.c2 = c.c2 and b.c3 > '2002-11-18 11:15:01'";
     hsql::SQLParserResult parser_result;
     hsql::SQLParser::parse(query, &parser_result);
-    auto steps = QueryOptimizer::GeneratePlan({
+    auto steps = GeneratePlan({
         {"a" , new table({"c1", "c2", "c3"}, {})},
         {"b" , new table({"c1", "c2", "c3"}, {})},
         {"c" , new table({"c1", "c2", "c3"}, {})}
@@ -315,7 +319,7 @@ int main() {
     }
     std::cout << std::endl << "After reduction: " << std::endl;
 
-    steps = QueryOptimizer::ReducePlan(steps);
+    steps = ::ReducePlan(steps);
     for (int i = 0;i < steps.size();i++) {
         auto step = steps[i];
         std::cout << "step " << i << " -> { ";

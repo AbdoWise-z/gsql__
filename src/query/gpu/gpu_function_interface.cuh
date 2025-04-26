@@ -32,6 +32,19 @@ namespace GFI {
         std::vector<size_t> mask
     );
 
+    void equality(
+        tensor<char, Device::GPU> *result,
+        column *col_1,
+        tval value,
+
+        std::vector<size_t> tileOffset,
+        std::vector<size_t> tileSize,
+
+        size_t table_1_index,
+
+        std::vector<size_t> mask
+    );
+
     void inequality(
         tensor<char, Device::GPU> *result,
         column *col_1,
@@ -42,6 +55,20 @@ namespace GFI {
 
         size_t table_1_index,
         size_t table_2_index,
+
+        std::vector<size_t> mask,
+        column::SortedSearchType operation
+    );
+
+    void inequality(
+        tensor<char, Device::GPU> *result,
+        column *col_1,
+        tval value,
+
+        std::vector<size_t> tileOffset,
+        std::vector<size_t> tileSize,
+
+        size_t table_1_index,
 
         std::vector<size_t> mask,
         column::SortedSearchType operation

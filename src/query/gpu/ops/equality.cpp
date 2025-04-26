@@ -142,7 +142,37 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
             (column_ptr->type == INTEGER && literal->type != hsql::ExprType::kExprLiteralInt) ||
             (column_ptr->type == FLOAT && literal->type != hsql::ExprType::kExprLiteralFloat)
             ) {
-            throw std::invalid_argument("Type mismatch between column and literal");
+
+            if (column_ptr->type == DateTime && literal->type != hsql::ExprType::kExprLiteralDate) {
+                auto dt = ValuesHelper::parseDateTime(literal->name);
+                if (dt == std::nullopt)
+                    throw std::invalid_argument("Type mismatch between column and literal");
+            } else {
+                throw std::invalid_argument("Type mismatch between column and literal");
+            }
+        }
+
+        tval value;
+        if (column_ptr->type == STRING)
+            value = ValuesHelper::create_from(literal->name);
+        else if (column_ptr->type == INTEGER)
+            value = ValuesHelper::create_from(literal->ival);
+        else if (column_ptr->type == FLOAT)
+            value = ValuesHelper::create_from(literal->fval);
+        else
+            value =  ValuesHelper::create_from(ValuesHelper::parseDateTime(literal->name).value());
+
+        std::vector<uint64_t> mask;
+        std::vector<size_t> hyperplane_pos;
+        int table_index = 0;
+        for (int i = 0;i < input_data->table_names.size(); ++i) {
+            hyperplane_pos.push_back(0);
+            if (input_data->table_names[i].contains(table_name)) {
+                mask.push_back(0);
+                table_index = i;
+            } else {
+                mask.push_back(1);
+            }
         }
 
         if (column_ptr->isHashIndexed()) {
@@ -154,26 +184,6 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
 #ifdef OP_EQUALS_DEBUG
             std::cout << "kExprOperator::Equals Accelerating using hash index" << std::endl;
 #endif
-            std::vector<uint64_t> mask;
-            std::vector<size_t> hyperplane_pos;
-            int table_index = 0;
-            for (int i = 0;i < input_data->table_names.size(); ++i) {
-                hyperplane_pos.push_back(0);
-                if (input_data->table_names[i].contains(table_name)) {
-                    mask.push_back(0);
-                    table_index = i;
-                } else {
-                    mask.push_back(1);
-                }
-            }
-
-            tval value;
-            if (column_ptr->type == STRING)
-                value = ValuesHelper::create_from(literal->name);
-            else if (column_ptr->type == INTEGER)
-                value = ValuesHelper::create_from(literal->ival);
-            else
-                value = ValuesHelper::create_from(literal->fval);
 
             auto bucket = column_ptr->hashSearch(value);
             ValuesHelper::deleteValue(value, column_ptr->type);
@@ -190,56 +200,17 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
             }
 
         } else {
-            std::vector<uint64_t> mask;
-            std::vector<size_t> hyperplane_pos;
-            int table_index = 0;
-            for (int i = 0;i < input_data->table_names.size(); ++i) {
-                hyperplane_pos.push_back(0);
-                if (input_data->table_names[i].contains(table_name)) {
-                    mask.push_back(0);
-                    table_index = i;
-                } else {
-                    mask.push_back(1);
-                }
-            }
 
-            if (column_ptr->type == STRING) {
-#ifdef OP_EQUALS_DEBUG
-                std::cout << "kExprOperator::Equals literal_val(str)=" << literal->name << std::endl;
-#endif
-                for (int i = result_offset[table_index]; i < result_offset[table_index] + result_size[table_index]; i++) {
-                    auto val = column_ptr->data[i];
-                    if (strcmp(val.s->c_str(), literal->name) == 0) {
-                        result->fill(1, hyperplane_pos, mask);
-                    }
 
-                    hyperplane_pos[table_index]++;
-                }
-            } else if (column_ptr->type == INTEGER) {
-#ifdef OP_EQUALS_DEBUG
-                std::cout << "kExprOperator::Equals literal_val(int)=" << literal->ival << std::endl;
-#endif
-                for (int i = result_offset[table_index]; i < result_offset[table_index] + result_size[table_index]; i++) {
-                    auto val = column_ptr->data[i];
-                    if (val.i == literal->ival) {
-                        result->fill(1, hyperplane_pos, mask);
-                    }
-
-                    hyperplane_pos[table_index]++;
-                }
-            } else {
-#ifdef OP_EQUALS_DEBUG
-                std::cout << "kExprOperator::Equals literal_val(float)=" << literal->fval << std::endl;
-#endif
-                for (int i = result_offset[table_index]; i < result_offset[table_index] + result_size[table_index]; i++) {
-                    auto val = column_ptr->data[i];
-                    if (val.d == literal->fval) {
-                        result->fill(1, hyperplane_pos, mask);
-                    }
-
-                    hyperplane_pos[table_index]++;
-                }
-            }
+            GFI::equality(
+                result,
+                column_ptr,
+                value,
+                tile_start,
+                tile_size,
+                table_index,
+                mask
+            );
         }
 
         return result;

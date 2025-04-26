@@ -68,6 +68,12 @@ namespace ValuesHelper {
         return res;
     }
 
+    inline tval create_from(const dateTime dt) {
+        tval res;
+        res.t = new dateTime(dt);
+        return res;
+    }
+
     void deleteValue(tval, DataType);
 
     std::string to_string(tval, DataType);

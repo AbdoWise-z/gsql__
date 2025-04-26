@@ -75,7 +75,13 @@ static auto columnPoolAllocator = [] (void* ptr, BufferAllocator alloc) {
     auto col = static_cast<column*>(ptr);
     auto size = col->data.size();
     void* gpuPtr = 0;
+
+    // for dt
     std::vector<dateTime> dateTimeData(0);
+
+    // for strings
+    std::vector<void*> ptrs;
+
     switch (col->type) {
         case INTEGER:
             gpuPtr = alloc(size * sizeof(int64_t));
@@ -97,13 +103,14 @@ static auto columnPoolAllocator = [] (void* ptr, BufferAllocator alloc) {
             size = size * sizeof(dateTime);
             break;
         case STRING:
-            gpuPtr = alloc(size * sizeof(void**));
             for (size_t i = 0; i < size; ++i) {
                 std::string* str = col->data[i].s;
                 auto gpu_str = alloc(str->size() + 1);
                 cu::toDevice(str->c_str(), gpu_str, str->size() + 1);
-                static_cast<void**>(gpuPtr)[i] = gpu_str;
+                ptrs.push_back(gpu_str);
             }
+            gpuPtr = cu::vectorToDevice(ptrs);
+            break;
         default:
             throw std::runtime_error("Unsupported column type");
 
@@ -112,12 +119,14 @@ static auto columnPoolAllocator = [] (void* ptr, BufferAllocator alloc) {
     auto result = std::make_tuple(size, gpuPtr, [=] () {
         // free function
         if (col->type == STRING) {
+            auto vec = cu::vectorFromDevice<void*>(gpuPtr, size);
             for (size_t i = 0; i < size; ++i) {
-                auto gpu_str = static_cast<void**>(gpuPtr)[i];
+                auto gpu_str = vec[i];
                 if (gpu_str != nullptr) {
                     cu::free(gpu_str);
                 }
             }
+            cu::free(gpuPtr);
         } else {
             cu::free(gpuPtr);
         }
@@ -397,6 +406,111 @@ void GFI::equality(
     cu::free(_tileSize);
 }
 
+void GFI::equality(tensor<char, Device::GPU> *result, column *col_1, tval value, std::vector<size_t> tileOffset,
+    std::vector<size_t> tileSize, size_t table_1_index, std::vector<size_t> mask) {
+
+    auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
+    CUDA_CHECK_LAST_ERROR("GFI::equality pool.getBufferOrCreate columnPoolAllocator");
+
+    auto _mask       = static_cast<size_t*>(cu::vectorToDevice(mask));
+    auto _tileOffset = static_cast<size_t*>(cu::vectorToDevice(tileOffset));
+    auto _tileSize   = static_cast<size_t*>(cu::vectorToDevice(tileSize));
+
+    char* _sVal       = nullptr;
+    if (col_1->type == STRING) {
+        _sVal = static_cast<char*>(cu::stringToDevice(*value.s));
+    }
+
+    {
+        dim3 grid((tileSize[table_1_index] + Cfg::BlockDim - 1) / (Cfg::BlockDim));
+        switch (col_1->type) {
+            case INTEGER:
+                EqualityKernel::equality_kernel<<<grid, dim3(Cfg::BlockDim)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<int64_t*>(_col_1),
+                    value.i,
+                    col_1->data.size(),
+
+                    _mask,
+                    table_1_index,
+
+                    _tileSize,
+                    _tileOffset
+                );
+            break;
+            case FLOAT:
+                EqualityKernel::equality_kernel<<<grid, dim3(Cfg::BlockDim)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<double*>(_col_1),
+                    value.d,
+                    col_1->data.size(),
+
+                    _mask,
+                    table_1_index,
+
+                    _tileSize,
+                    _tileOffset
+                    );
+            break;
+            case STRING:
+                EqualityKernel::equality_kernel<<<grid, dim3(Cfg::BlockDim)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<const char**>(_col_1),
+                    static_cast<const char*>(_sVal),
+                    col_1->data.size(),
+
+                    _mask,
+                    table_1_index,
+
+                    _tileSize,
+                    _tileOffset
+                    );
+            break;
+            case DateTime:
+                EqualityKernel::equality_kernel<<<grid, dim3(Cfg::BlockDim)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<dateTime*>(_col_1),
+                    *value.t,
+                    col_1->data.size(),
+
+                    _mask,
+                    table_1_index,
+
+                    _tileSize,
+                    _tileOffset
+                    );
+            break;
+            default:
+                throw std::runtime_error("Unsupported column type");
+        }
+
+    }
+    CUDA_CHECK_LAST_ERROR("EqualityKernel::equality_kernel");
+
+    const auto size = result->totalSize();
+    dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
+    TensorKernel::extend_plain_kernel<<<grid, dim3(Cfg::BlockDim)>>>(result->data, result->totalSize(), _mask, _tileSize, mask.size());
+
+    CUDA_CHECK_LAST_ERROR("TensorKernel::extend_plain_kernel");
+
+    cu::free(_mask);
+    cu::free(_tileOffset);
+    cu::free(_tileSize);
+    cu::free(_sVal);
+}
+
 void GFI::inequality(
         tensor<char, Device::GPU> *result,
 
@@ -627,6 +741,115 @@ void GFI::inequality(
     cu::free(_mask);
     cu::free(_tileOffset);
     cu::free(_tileSize);
+}
+
+void GFI::inequality(tensor<char, Device::GPU> *result, column *col_1, tval value, std::vector<size_t> tileOffset,
+    std::vector<size_t> tileSize, size_t table_1_index, std::vector<size_t> mask, column::SortedSearchType operation) {
+
+    auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
+    CUDA_CHECK_LAST_ERROR("GFI::equality pool.getBufferOrCreate columnPoolAllocator");
+
+    auto _mask       = static_cast<size_t*>(cu::vectorToDevice(mask));
+    auto _tileOffset = static_cast<size_t*>(cu::vectorToDevice(tileOffset));
+    auto _tileSize   = static_cast<size_t*>(cu::vectorToDevice(tileSize));
+
+    char* _sVal       = nullptr;
+    if (col_1->type == STRING) {
+        _sVal = static_cast<char*>(cu::stringToDevice(*value.s));
+    }
+
+    {
+        dim3 grid((tileSize[table_1_index] + Cfg::BlockDim - 1) / (Cfg::BlockDim));
+        switch (col_1->type) {
+            case INTEGER:
+                InequalityKernel::inequality_kernel<<<grid, dim3(Cfg::BlockDim)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<int64_t*>(_col_1),
+                    value.i,
+                    col_1->data.size(),
+
+                    _mask,
+                    table_1_index,
+
+                    _tileSize,
+                    _tileOffset,
+                    operation
+                );
+            break;
+            case FLOAT:
+                InequalityKernel::inequality_kernel<<<grid, dim3(Cfg::BlockDim)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<double*>(_col_1),
+                    value.d,
+                    col_1->data.size(),
+
+                    _mask,
+                    table_1_index,
+
+                    _tileSize,
+                    _tileOffset,
+                    operation
+                    );
+            break;
+            case STRING:
+                InequalityKernel::inequality_kernel<<<grid, dim3(Cfg::BlockDim)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<const char**>(_col_1),
+                    static_cast<const char*>(_sVal),
+                    col_1->data.size(),
+
+                    _mask,
+                    table_1_index,
+
+                    _tileSize,
+                    _tileOffset,
+                    operation
+                    );
+            break;
+            case DateTime:
+                InequalityKernel::inequality_kernel<<<grid, dim3(Cfg::BlockDim)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<dateTime*>(_col_1),
+                    *value.t,
+                    col_1->data.size(),
+
+                    _mask,
+                    table_1_index,
+
+                    _tileSize,
+                    _tileOffset,
+                    operation
+                    );
+            break;
+            default:
+                throw std::runtime_error("Unsupported column type");
+        }
+    }
+
+    CUDA_CHECK_LAST_ERROR("EqualityKernel::equality_kernel");
+
+    const auto size = result->totalSize();
+    dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
+    TensorKernel::extend_plain_kernel<<<grid, dim3(Cfg::BlockDim)>>>(result->data, result->totalSize(), _mask, _tileSize, mask.size());
+
+    CUDA_CHECK_LAST_ERROR("TensorKernel::extend_plain_kernel");
+
+    cu::free(_mask);
+    cu::free(_tileOffset);
+    cu::free(_tileSize);
+    cu::free(_sVal);
 }
 
 void GFI::logical_and(const tensor<char, Device::GPU> *a, const tensor<char, Device::GPU> *b, tensor<char, Device::GPU> *out) {

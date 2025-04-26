@@ -26,6 +26,8 @@ namespace QueryOptimizer {
                 return ">=";
             case hsql::kOpEquals:
                 return "=";
+            case hsql::kOpNotEquals:
+                return "!=";
             default: ;
         }
 
@@ -275,7 +277,7 @@ namespace QueryOptimizer {
         for (int i = 0; i < before_steps.size(); ++i) {
             skip.push_back(false);
             auto& a = before_steps[i];
-            for (int j = i - 1; j > 0; --j) {
+            for (int j = i - 1; j >= 0; --j) {
                 auto& b = before_steps[j];
                 if (skip[j]) continue;
                 if (isSubSet(a.output_names, b.output_names)) {

@@ -92,11 +92,19 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
         auto query_input = step.input;
         auto where = step.query;
 
+        bool injected = false;
+
         for (int i = 0; i < query_input.tables.size(); ++i) {
             if (QueryOptimizer::intersects(query_input.table_names[i], result_tables)) {
                 query_input.tables[i] = result.result;
                 query_input.table_names[i] = QueryOptimizer::Union(result_tables, query_input.table_names[i]);
+                injected = true;
             }
+        }
+
+        if (!injected && result.result != nullptr) {
+            query_input.tables.push_back(result.result);
+            query_input.table_names.push_back(result_tables);
         }
 
         if (where == nullptr && query_input.tables.size() == 1) {

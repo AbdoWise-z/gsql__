@@ -83,7 +83,6 @@ namespace EqualityKernel {
     /// ===========================
     /// Normal Kernels (2D)
     /// ===========================
-    ///
     template<typename T>
     __global__ void equality_kernel(
         // result params
@@ -131,7 +130,52 @@ namespace EqualityKernel {
         pos[table_2_i] = col2_index - tileOffset[table_2_i];
 
         if (InequalityKernel::cmp(val1, val2) == 0) {
-            pos[table_2_i] = col2_index - tileOffset[table_2_i];
+            result[TensorKernel::map(pos, tileShape, tablesCount)] = 1;
+        }
+    }
+
+    /// ===========================
+    /// Normal Kernels (1D - Col , literal)
+    /// ===========================
+    template<typename T>
+    __global__ void equality_kernel(
+        // result params
+        char* result,
+        size_t dataSize,
+        size_t tablesCount,
+
+        // data params
+        const T* col_1,
+        const T  literal,
+        size_t  col_1_size,
+
+        // masking params
+        size_t *mask,
+        size_t table_1_i,
+
+        // tiling params
+        size_t* tileShape,
+        size_t* tileOffset
+    ) {
+        size_t iTh = blockIdx.x * blockDim.x + threadIdx.x;
+
+        if (iTh >= tileShape[table_1_i]) return;
+
+        auto col1_index = iTh + tileOffset[table_1_i];
+        if (col1_index >= col_1_size) return;
+
+
+        auto val1 = col_1[col1_index];
+
+        size_t pos[MAX_TENSOR_DIMS];
+
+        for (int i = 0;i < tablesCount; i++) {
+            pos[i] = 0; // store the data in the zero-th plain
+        }
+
+        pos[table_1_i] = col1_index - tileOffset[table_1_i];
+
+        if (InequalityKernel::cmp(val1, literal) == 0) {
             result[TensorKernel::map(pos, tileShape, tablesCount)] = 1;
         }
     }
