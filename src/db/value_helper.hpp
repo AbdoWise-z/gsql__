@@ -9,7 +9,6 @@
 #include <csv.hpp>
 #include <optional>
 #include <string>
-#include <bits/regex.h>
 
 #include "typing.hpp"
 #include "utils/murmur_hash3.hpp"
@@ -34,39 +33,46 @@ union tval {
     dateTime*    t;
 };
 
-int cmp(const tval& a, const tval& b, const DataType& t);
+namespace ValuesHelper {
+    int cmp(const int64_t& a, const int64_t& b);
+    int cmp(const double& a, const double& b);
+    int cmp(const char* a, const char* b);
+    int cmp(const dateTime& a, const dateTime& b);
 
-size_t sizeOf(const tval& v, const DataType& t);
+    int cmp(const tval& a, const tval& b, const DataType& t);
 
-tval copy(tval v, const DataType& t);
+    size_t sizeOf(const tval& v, const DataType& t);
 
-inline uint64_t hash(const tval& v, const DataType& t) {
-    return MurmurHash3_x64_64((t == STRING || t == DateTime) ? static_cast<const void*>(v.s) : static_cast<const void*>(&v), sizeOf(v, t), SEED);
+    tval copy(tval v, const DataType& t);
+
+    inline uint64_t hash(const tval& v, const DataType& t) {
+        return MurmurHash3_x64_64((t == STRING || t == DateTime) ? static_cast<const void*>(v.s) : static_cast<const void*>(&v), sizeOf(v, t), SEED);
+    }
+
+    inline tval create_from(const std::string& str) {
+        tval res;
+        res.s = new std::string(str);
+        return res;
+    }
+
+    inline tval create_from(int64_t i) {
+        tval res;
+        res.i = i;
+        return res;
+    }
+
+
+    inline tval create_from(double d) {
+        tval res;
+        res.d = d;
+        return res;
+    }
+
+    void deleteValue(tval, DataType);
+
+    std::string to_string(tval, DataType);
+
+    std::optional<dateTime> parseDateTime(const std::string& input);
 }
-
-inline tval create_from(const std::string& str) {
-    tval res;
-    res.s = new std::string(str);
-    return res;
-}
-
-inline tval create_from(int64_t i) {
-    tval res;
-    res.i = i;
-    return res;
-}
-
-
-inline tval create_from(double d) {
-    tval res;
-    res.d = d;
-    return res;
-}
-
-void deleteValue(tval, DataType);
-
-std::string to_string(tval, DataType);
-
-std::optional<dateTime> parseDateTime(const std::string& input);
 
 #endif //VALUE_HELPER_HPP

@@ -13,28 +13,28 @@ tval Agg::GPU::max(column *col) {
         throw UnsupportedOperationError("Cannot aggregate (max) over a string column");
 
     if (col->type == INTEGER) {
-        if (col->isSortIndexed()) return create_from(col->data[col->sorted.back()].i);
+        if (col->isSortIndexed()) return ValuesHelper::create_from(col->data[col->sorted.back()].i);
 
         int64_t _max = std::numeric_limits<int64_t>::min();
         for (auto item: col->data) {
             _max = _max > item.i ? _max : item.i;
         }
 
-        return create_from(_max);
+        return ValuesHelper::create_from(_max);
     }
 
     if (col->type == FLOAT) {
-        if (col->isSortIndexed()) return create_from(col->data[col->sorted.back()].d);
+        if (col->isSortIndexed()) return ValuesHelper::create_from(col->data[col->sorted.back()].d);
 
         double _max = std::numeric_limits<double>::min();
         for (auto item: col->data) {
             _max = _max > item.d ? _max : item.d;
         }
 
-        return create_from(_max);
+        return ValuesHelper::create_from(_max);
     }
 
-    return create_from("ERROR IN AGG MAX");
+    return ValuesHelper::create_from("ERROR IN AGG MAX");
 }
 
 tval Agg::GPU::min(column *col) {
@@ -47,7 +47,7 @@ tval Agg::GPU::min(column *col) {
 #ifdef MAX_MIN_DEBUG
             std::cout << "Agg::min result=" << col->data[col->sorted[0]].i << " (index)" << std::endl;
 #endif
-            return create_from(col->data[col->sorted[0]].i);
+            return ValuesHelper::create_from(col->data[col->sorted[0]].i);
         }
 
         int64_t _min = std::numeric_limits<int64_t>::max();
@@ -57,7 +57,7 @@ tval Agg::GPU::min(column *col) {
 #ifdef MAX_MIN_DEBUG
         std::cout << "Agg::min result=" << _min << std::endl;
 #endif
-        return create_from(_min);
+        return ValuesHelper::create_from(_min);
     }
 
     if (col->type == FLOAT) {
@@ -65,7 +65,7 @@ tval Agg::GPU::min(column *col) {
 #ifdef MAX_MIN_DEBUG
             std::cout << "Agg::min result=" << col->data[col->sorted[0]].d << " (index)" << std::endl;
 #endif
-            return create_from(col->data[col->sorted[0]].d);
+            return ValuesHelper::create_from(col->data[col->sorted[0]].d);
         }
 
         double _min = std::numeric_limits<double>::max();
@@ -76,8 +76,8 @@ tval Agg::GPU::min(column *col) {
 #ifdef MAX_MIN_DEBUG
         std::cout << "Agg::min result=" << _min << std::endl;
 #endif
-        return create_from(_min);
+        return ValuesHelper::create_from(_min);
     }
 
-    return create_from("ERROR IN AGG MIN");
+    return ValuesHelper::create_from("ERROR IN AGG MIN");
 }

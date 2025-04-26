@@ -157,14 +157,14 @@ tensor<char, Device::CPU> * Ops::CPU::equality(
 
             tval value;
             if (column_ptr->type == STRING)
-                value = create_from(literal->name);
+                value = ValuesHelper::create_from(literal->name);
             else if (column_ptr->type == INTEGER)
-                value = create_from(literal->ival);
+                value = ValuesHelper::create_from(literal->ival);
             else
-                value = create_from(literal->fval);
+                value = ValuesHelper::create_from(literal->fval);
 
             auto bucket = column_ptr->hashSearch(value);
-            deleteValue(value, column_ptr->type);
+            ValuesHelper::deleteValue(value, column_ptr->type);
 
             for (auto r: bucket) {
                 if (r < result_offset[table_index] || r >= result_offset[table_index] + result_size[table_index]) {

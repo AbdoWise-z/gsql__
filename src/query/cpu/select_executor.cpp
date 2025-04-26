@@ -274,7 +274,7 @@ SelectExecutor::CPU::ConstructionResult SelectExecutor::CPU::ConstructTable(
                 const auto t = input->tables[m];
                 for (int k = 0;k < t->headers.size();k++) {
                     auto val = t->columns[k]->data[tuple_index[m]];
-                    result->columns[j]->data.push_back(copy(val, t->columns[k]->type));
+                    result->columns[j]->data.push_back(ValuesHelper::copy(val, t->columns[k]->type));
                     j++;
                 }
             }
@@ -318,7 +318,7 @@ void SelectExecutor::CPU::AppendTable(
                 const auto t = input->tables[m];
                 for (int k = 0;k < t->headers.size();k++) {
                     auto val = t->columns[k]->data[pos[m]];
-                    result->columns[j]->data.push_back(copy(val, t->columns[k]->type));
+                    result->columns[j]->data.push_back(ValuesHelper::copy(val, t->columns[k]->type));
                     j++;
                 }
             }

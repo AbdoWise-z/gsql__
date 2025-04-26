@@ -16,7 +16,7 @@ tval Agg::CPU::sum(column *col) {
             sum += item.i;
         }
 
-        return create_from(sum);
+        return ValuesHelper::create_from(sum);
     }
 
     if (col->type == FLOAT) {
@@ -25,10 +25,10 @@ tval Agg::CPU::sum(column *col) {
             sum += item.d;
         }
 
-        return create_from(sum);
+        return ValuesHelper::create_from(sum);
     }
 
-    return create_from("ERROR IN AGG SUM");
+    return ValuesHelper::create_from("ERROR IN AGG SUM");
 }
 
 tval Agg::CPU::avg(column *col) {
@@ -36,7 +36,7 @@ tval Agg::CPU::avg(column *col) {
         throw UnsupportedOperationError("Cannot aggregate (avg) over a string column");
 
     if (col->data.empty()) {
-        return create_from("Inf");
+        return ValuesHelper::create_from("Inf");
     }
 
     if (col->type == INTEGER) {
@@ -45,7 +45,7 @@ tval Agg::CPU::avg(column *col) {
             sum += item.i;
         }
 
-        return create_from(sum / col->data.size());
+        return ValuesHelper::create_from(sum / col->data.size());
     }
 
     if (col->type == FLOAT) {
@@ -54,12 +54,12 @@ tval Agg::CPU::avg(column *col) {
             sum += item.d;
         }
 
-        return create_from(sum / col->data.size());
+        return ValuesHelper::create_from(sum / col->data.size());
     }
 
-    return create_from("ERROR IN AGG SUM");
+    return ValuesHelper::create_from("ERROR IN AGG SUM");
 }
 
 tval Agg::CPU::count(const column *col) {
-    return create_from(static_cast<int64_t>(col->data.size()));
+    return ValuesHelper::create_from(static_cast<int64_t>(col->data.size()));
 }

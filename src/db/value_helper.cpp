@@ -5,9 +5,28 @@
 #include "value_helper.hpp"
 
 #include <string>
+#include <regex>
+#include <optional>
 
+int ValuesHelper::cmp(const int64_t& a, const int64_t& b) {
+    return a > b ? 1 : (a < b ? -1 : 0);
+}
 
-int cmp(const tval& a, const tval& b, const DataType& t) {
+int ValuesHelper::cmp(const double& a, const double& b) {
+    return a > b ? 1 : (a < b ? -1 : 0);
+}
+
+int ValuesHelper::cmp(const char* a, const char* b) {
+    return strcmp(a, b);
+}
+
+int ValuesHelper::cmp(const dateTime &a, const dateTime &b) {
+    int64_t a_v = a.year * 31104000 + a.month * 2592000 + a.day * 86000 + a.hour * 3600 + a.minute * 60 + a.second;
+    int64_t b_v = b.year * 31104000 + b.month * 2592000 + b.day * 86000 + b.hour * 3600 + b.minute * 60 + b.second;
+    return 1 * (a_v > b_v) + -1 * (a_v < b_v);
+}
+
+int ValuesHelper::cmp(const tval& a, const tval& b, const DataType& t) {
     switch (t) {
         case STRING:
             return strcmp(a.s->c_str(), b.s->c_str());
@@ -27,7 +46,7 @@ int cmp(const tval& a, const tval& b, const DataType& t) {
     return 0;
 }
 
-size_t sizeOf(const tval &v, const DataType &t) {
+size_t ValuesHelper::sizeOf(const tval &v, const DataType &t) {
     switch (t) {
         case STRING:
             return v.s->length();
@@ -42,7 +61,7 @@ size_t sizeOf(const tval &v, const DataType &t) {
     return 0;
 }
 
-tval copy(const tval v, const DataType& t) {
+tval ValuesHelper::copy(const tval v, const DataType& t) {
     tval result{};
 
     if (t == STRING) {
@@ -58,14 +77,14 @@ tval copy(const tval v, const DataType& t) {
     return result;
 }
 
-void deleteValue(tval v, DataType t) {
+void ValuesHelper::deleteValue(tval v, DataType t) {
     if (t == STRING) delete v.s;
     if (t == DateTime) delete v.t;
 
     v.s = nullptr; // v.t == nullptr;
 }
 
-std::string to_string(tval v, DataType t) {
+std::string ValuesHelper::to_string(tval v, DataType t) {
     switch (t) {
         case STRING:
             return *v.s;
@@ -85,7 +104,7 @@ std::string to_string(tval v, DataType t) {
     return "__non_type__";
 }
 
-std::optional<dateTime> parseDateTime(const std::string &input) {
+std::optional<dateTime> ValuesHelper::parseDateTime(const std::string &input) {
     // Regex capturing groups: year, month, day, hour, minute, second
     static const std::regex re(
         R"(^([0-9]{4})-([0-1][0-9])\-([0-3][0-9])\s+([0-2][0-9]):([0-5][0-9]):([0-5][0-9])$)"

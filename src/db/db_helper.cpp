@@ -6,8 +6,6 @@
 
 #include <csv.hpp>
 #include <hsql/sql/ColumnType.h>
-#include <regex>
-#include <optional>
 
 
 static std::vector<DataType> inferTypes(const csv::CSVRow& row) {
@@ -17,7 +15,7 @@ static std::vector<DataType> inferTypes(const csv::CSVRow& row) {
     for (auto field: row) {
         switch (field.type()) {
             case csv::DataType::CSV_STRING:
-                dt = parseDateTime(field.get<std::string>());
+                dt = ValuesHelper::parseDateTime(field.get<std::string>());
                 if (dt != std::nullopt)
                     types.push_back(DateTime);
                 else
@@ -68,7 +66,7 @@ table * fromCSV(std::string path) {
             tval val{};
             switch (field.type()) {
                 case csv::DataType::CSV_STRING:
-                    dt = parseDateTime(field.get<std::string>());
+                    dt = ValuesHelper::parseDateTime(field.get<std::string>());
                     if (dt == std::nullopt)
                         val.s = new std::string(field.get<std::string>());
                     else

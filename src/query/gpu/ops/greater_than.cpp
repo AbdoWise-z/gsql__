@@ -59,8 +59,15 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
 #ifdef OP_GREATER_DEBUG
             std::cout << "kExprOperator::Greater String, left=" << left->name << " & right=" << right->name << std::endl;
 #endif
+            int r = 0;
+            auto lt = ValuesHelper::parseDateTime(left->name);
+            auto rt = ValuesHelper::parseDateTime(left->name);
+            if (lt != std::nullopt && rt != std::nullopt) {
+                r = ValuesHelper::cmp(rt.value(), rt.value());
+            } else {
+                r = ValuesHelper::cmp(left->name, right->name);
+            }
 
-            auto r = strcmp(left->name, right->name);
             result->setAll(r > 0 ? 1 : 0);
             return result;
         }
@@ -133,6 +140,9 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
             (column_ptr->type == INTEGER && literal->type != hsql::ExprType::kExprLiteralInt) ||
             (column_ptr->type == FLOAT && literal->type != hsql::ExprType::kExprLiteralFloat)
             ) {
+            if (column_ptr->type == DateTime && literal->type != hsql::ExprType::kExprLiteralDate) {
+
+            }
             throw std::invalid_argument("Type mismatch between column and literal");
         }
 
@@ -160,14 +170,14 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
 
             tval value;
             if (column_ptr->type == STRING)
-                value = create_from(literal->name);
+                value = ValuesHelper::create_from(literal->name);
             else if (column_ptr->type == INTEGER)
-                value = create_from(literal->ival);
+                value = ValuesHelper::create_from(literal->ival);
             else
-                value = create_from(literal->fval);
+                value = ValuesHelper::create_from(literal->fval);
 
             auto bucket = column_ptr->sortSearch(value, literal_on_left ? column::SST_GT : column::SST_LT);
-            deleteValue(value, column_ptr->type);
+            ValuesHelper::deleteValue(value, column_ptr->type);
 
             for (auto r: bucket) {
                 if (r < result_offset[table_index] || r >= result_offset[table_index] + result_size[table_index]) {

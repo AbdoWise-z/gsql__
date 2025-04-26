@@ -59,9 +59,16 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
 #ifdef OP_EQUALS_DEBUG
             std::cout << "kExprOperator::Equals String, left=" << left->name << " & right=" << right->name << std::endl;
 #endif
-            auto r = strcmp(left->name, right->name);
+            int r = 0;
+            auto lt = ValuesHelper::parseDateTime(left->name);
+            auto rt = ValuesHelper::parseDateTime(left->name);
+            if (lt != std::nullopt && rt != std::nullopt) {
+                r = ValuesHelper::cmp(rt.value(), rt.value());
+            } else {
+                r = ValuesHelper::cmp(left->name, right->name);
+            }
             auto* result = new tensor<char, Device::GPU>(result_size);
-            result->setAll( r == 0 ? 1 : 0);
+            result->setAll(r == 0 ? 1 : 0);
             return result;
         }
 
@@ -162,14 +169,14 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
 
             tval value;
             if (column_ptr->type == STRING)
-                value = create_from(literal->name);
+                value = ValuesHelper::create_from(literal->name);
             else if (column_ptr->type == INTEGER)
-                value = create_from(literal->ival);
+                value = ValuesHelper::create_from(literal->ival);
             else
-                value = create_from(literal->fval);
+                value = ValuesHelper::create_from(literal->fval);
 
             auto bucket = column_ptr->hashSearch(value);
-            deleteValue(value, column_ptr->type);
+            ValuesHelper::deleteValue(value, column_ptr->type);
 
             for (auto r: bucket) {
                 if (r < result_offset[table_index] || r >= result_offset[table_index] + result_size[table_index]) {
