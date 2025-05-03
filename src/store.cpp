@@ -20,7 +20,7 @@ namespace Cfg {
 
     size_t useAccelerator = 1;
 
-    size_t radixIntegerMaskSize = 1;
+    size_t radixIntegerMaskSize = 4;
     size_t radixStringMaskSize  = 4;
 
     std::vector<size_t> getTileSizeFor(const std::vector<size_t>& inputSize) {
