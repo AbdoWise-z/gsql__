@@ -9,6 +9,7 @@
 #include "kernels/equality_kernel.cuh"
 #include "kernels/helper_kernels.cuh"
 #include "kernels/inequality_kernel.cuh"
+#include "kernels/order_by.cuh"
 #include "kernels/reduce_kernels.cuh"
 #include "kernels/tensor_kernels.cuh"
 #include "utils/murmur_hash3_cuda.cuh"
@@ -863,7 +864,7 @@ static T run_reducer(T* input, size_t n, __rf func) {
     func<<<blocks, Cfg::BlockDim, (Cfg::BlockDim * 2) * sizeof(T)>>>(input, n, d_block_sums);
     CUDA_CHECK_LAST_ERROR("run_reducer::Reducer_Func");
 
-    T result;
+    T result{};
 
     if (blocks > Cfg::BlockDim * 2) {
         result = run_reducer<T, __rf>(d_block_sums, blocks, func);
@@ -1050,7 +1051,7 @@ void GFI::logical_not(const tensor<char, Device::GPU> *a, tensor<char, Device::G
     CUDA_CHECK_LAST_ERROR("TensorKernel::logical_not");
 }
 
-static void run_scan(size_t* input, size_t* output, size_t n) {
+static void run_prefix_sum(size_t* input, size_t* output, size_t n) {
     if (n == 0) return;
 
     size_t blocks = (n + Cfg::BlockDim * 2 - 1) / (Cfg::BlockDim * 2);
@@ -1063,7 +1064,7 @@ static void run_scan(size_t* input, size_t* output, size_t n) {
 
     if (blocks > Cfg::BlockDim) {
         auto r_v = static_cast<size_t*>(cu::malloc(blocks * sizeof(size_t)));
-        run_scan(d_block_sums, r_v, blocks);
+        run_prefix_sum(d_block_sums, r_v, blocks);
         CUDA_CHECK_LAST_ERROR("run_scan::recursive");
         cu::free(d_block_sums);
         d_block_sums = r_v;
@@ -1081,7 +1082,7 @@ static void run_scan(size_t* input, size_t* output, size_t n) {
     cudaFree(d_block_sums);
 }
 
-static void run_scan(char* input, size_t* output, size_t n) {
+static void run_prefix_sum(char* input, size_t* output, size_t n) {
     if (n == 0) return;
 
     size_t blocks = (n + Cfg::BlockDim * 2 - 1) / (Cfg::BlockDim * 2);
@@ -1093,7 +1094,7 @@ static void run_scan(char* input, size_t* output, size_t n) {
 
     if (blocks > Cfg::BlockDim) {
         auto r_v = static_cast<size_t*>(cu::malloc(blocks * sizeof(size_t)));
-        run_scan(d_block_sums, r_v, blocks);
+        run_prefix_sum(d_block_sums, r_v, blocks);
         CUDA_CHECK_LAST_ERROR("run_scan::recursive");
         cu::free(d_block_sums);
         d_block_sums = r_v;
@@ -1111,6 +1112,64 @@ static void run_scan(char* input, size_t* output, size_t n) {
     cu::free(d_block_sums);
 }
 
+static void run_prefix_sum(uint32_t* input, uint32_t* output, size_t n) {
+    if (n == 0) return;
+
+    size_t blocks = (n + Cfg::BlockDim * 2 - 1) / (Cfg::BlockDim * 2);
+
+    auto d_block_sums = static_cast<uint32_t*>(cu::malloc(blocks * sizeof(uint32_t)));
+
+    TensorKernel::efficient_prefix_sum<<<blocks, Cfg::BlockDim, (Cfg::BlockDim * 2) * sizeof(size_t)>>>(input, output, n, d_block_sums);
+    CUDA_CHECK_LAST_ERROR("TensorKernel::efficient_prefix_sum");
+
+    if (blocks > Cfg::BlockDim) {
+        auto r_v = static_cast<uint32_t*>(cu::malloc(blocks * sizeof(uint32_t)));
+        run_prefix_sum(d_block_sums, r_v, blocks);
+        CUDA_CHECK_LAST_ERROR("run_scan::recursive");
+        cu::free(d_block_sums);
+        d_block_sums = r_v;
+    } else {
+        TensorKernel::efficient_prefix_sum<<<1, Cfg::BlockDim, (Cfg::BlockDim * 2) * sizeof(size_t)>>>(d_block_sums, d_block_sums, blocks, nullptr);
+        CUDA_CHECK_LAST_ERROR("TensorKernel::efficient_prefix_sum");
+    }
+
+    if (blocks > 1) {
+        TensorKernel::add_aux<<<blocks - 1, Cfg::BlockDim>>>(output, n, d_block_sums);
+        CUDA_CHECK_LAST_ERROR("TensorKernel::add_aux");
+    }
+
+    cu::free(d_block_sums);
+}
+//
+// static void run_prefix_sum(uint32_t* input, uint32_t* output, size_t n, size_t pins) {
+//     if (n == 0) return;
+//
+//     size_t blocks = (n + Cfg::BlockDim * 2 - 1) / (Cfg::BlockDim * 2);
+//
+//     auto d_block_sums = static_cast<uint32_t*>(cu::malloc(pins * blocks * sizeof(uint32_t)));
+//
+//     OrderBy::efficient_local_prefix_sum<<<blocks, Cfg::BlockDim, (Cfg::BlockDim * 2) * sizeof(uint32_t) * pins >>>(input, output, n, pins, d_block_sums);
+//     CUDA_CHECK_LAST_ERROR("OrderBy::efficient_local_prefix_sum");
+//
+//     if (blocks > Cfg::BlockDim) {
+//         auto r_v = static_cast<uint32_t*>(cu::malloc(pins * blocks * sizeof(uint32_t)));
+//         run_prefix_sum(d_block_sums, r_v, blocks, pins);
+//         CUDA_CHECK_LAST_ERROR("run_prefix_sum::recursive");
+//         cu::free(d_block_sums);
+//         d_block_sums = r_v;
+//     } else {
+//         OrderBy::efficient_local_prefix_sum<<<1, Cfg::BlockDim, (Cfg::BlockDim * 2) * sizeof(uint32_t) * pins>>>(d_block_sums, d_block_sums, blocks, pins, nullptr);
+//         CUDA_CHECK_LAST_ERROR("OrderBy::efficient_local_prefix_sum internal");
+//     }
+//
+//     if (blocks > 1) {
+//         OrderBy::add_local_aux<<<blocks - 1, Cfg::BlockDim>>>(output, n, pins, d_block_sums);
+//         CUDA_CHECK_LAST_ERROR("OrderBy::add_local_aux");
+//     }
+//
+//     cu::free(d_block_sums);
+// }
+
 
 std::vector<size_t> GFI::iterator(tensor<char, Device::GPU> *a) {
     std::vector<size_t> result;
@@ -1118,7 +1177,7 @@ std::vector<size_t> GFI::iterator(tensor<char, Device::GPU> *a) {
 
     auto out = static_cast<size_t*>(cu::malloc(sizeof(size_t) * size));
 
-    run_scan(a->data, out, size);
+    run_prefix_sum(a->data, out, size);
 
     auto cpu_out = static_cast<size_t*>(malloc(sizeof(size_t) * size));
 
@@ -1149,6 +1208,119 @@ std::vector<size_t> GFI::iterator(tensor<char, Device::GPU> *a) {
 
     cu::free(out);
     free(cpu_out);
+
+    return result;
+}
+
+std::vector<uint32_t> GFI::sort(column *col_1) {
+
+    size_t size = col_1->data.size();
+    std::vector<uint32_t> result(size, 0);
+
+    dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
+
+    auto indices_in  = static_cast<uint32_t*>(cu::malloc(sizeof(uint32_t) * size));
+    auto indices_out = static_cast<uint32_t*>(cu::malloc(sizeof(uint32_t) * size));
+
+    auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
+    CUDA_CHECK_LAST_ERROR("GFI::sort pool.getBufferOrCreate columnPoolAllocator");
+
+    auto maskSize = Cfg::radixIntegerMaskSize;
+    uint32_t numPins  = (1 << maskSize);
+    uint32_t maskBits = (1 << maskSize) - 1;
+
+    uint32_t shiftBits = 0;
+
+    auto histogram     = static_cast<uint32_t*>(cu::malloc(sizeof(uint32_t) * numPins));
+    auto pins_offset   = static_cast<uint32_t*>(cu::malloc(sizeof(uint32_t) * numPins));
+    auto pins          = static_cast<uint32_t*>(cu::malloc(sizeof(uint32_t) * size * numPins));
+    auto local_offset  = static_cast<uint32_t*>(cu::malloc(sizeof(uint32_t) * size * numPins));
+
+    std::vector<uint32_t> observer(size * numPins, 0);
+    std::vector<uint32_t> observer2(size * numPins, 0);
+
+    // initialize
+    for (size_t i = 0;i < size;i++) {
+        result[i] = i;
+    }
+
+    // move initial data
+    cu::toDevice(result.data(), indices_in, sizeof(uint32_t) * size);
+
+    // now do sorting
+    while (shiftBits < sizeof(int64_t) * 8) {
+        // do histogram
+        TensorKernel::fill_kernel<<<(numPins + Cfg::BlockDim - 1) / Cfg::BlockDim ,Cfg::BlockDim>>>(histogram, (uint32_t) 0, numPins);
+        OrderBy::histogram_kernel_indexed<<<grid, Cfg::BlockDim, sizeof(uint32_t) * numPins>>>(
+            static_cast<int64_t*>(_col_1),
+            indices_in,
+            histogram,
+            pins,
+            size,
+            maskBits,
+            shiftBits,
+            numPins
+        );
+        CUDA_CHECK_LAST_ERROR("GFI::sort OrderBy::histogram_kernel_indexed<<<grid, Cfg::BlockDim, sizeof(uint32_t) * numPins>>>");
+
+        cu::toHost(histogram, result.data(), sizeof(uint32_t) * std::min(numPins, (uint32_t) size));
+        cu::toHost(pins, observer.data(), sizeof(uint32_t) * size * numPins);
+        for (int i = 0;i < size;i++) {
+            int idx = 0;
+            for (int j = 0 ;j < numPins;j++) {
+                if (observer[i + size * j]) {
+                    idx = j; break;
+                }
+            }
+
+            observer[i] = idx;
+        }
+        CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
+
+        // do prefix
+        for (size_t i = 0;i < numPins;i++) {
+            const auto offset = size * i;
+            run_prefix_sum(pins + offset, local_offset + offset, size);
+        }
+        CUDA_CHECK_LAST_ERROR("GFI::sort run_prefix_sum local");
+        run_prefix_sum(histogram, pins_offset, numPins);
+        CUDA_CHECK_LAST_ERROR("GFI::sort run_prefix_sum");
+
+        cu::toHost(pins_offset, result.data(), sizeof(uint32_t) * std::min(numPins, (uint32_t) size));
+        cu::toHost(local_offset, observer2.data(), sizeof(uint32_t) * size * numPins);
+        CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
+
+        // do radix
+        OrderBy::radix_scatter_pass<<<grid, Cfg::BlockDim>>>(
+            static_cast<int64_t*>(_col_1),
+            indices_in,
+            indices_out,
+            pins_offset,
+            local_offset,
+            size,
+            maskBits,
+            shiftBits
+        );
+        CUDA_CHECK_LAST_ERROR("GFI::sort OrderBy::radix_scatter_pass<<<grid, Cfg::BlockDim>>>");
+        cu::toHost(indices_out, result.data(), sizeof(uint32_t) * size);
+        CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
+
+        auto temp = indices_in;
+        indices_in = indices_out;
+        indices_out = temp;
+
+        shiftBits += maskSize;
+    }
+
+    cu::toHost(indices_in, result.data(), sizeof(uint32_t) * size);
+
+    cu::free(indices_in);
+    cu::free(indices_out);
+
+    cu::free(histogram);
+    cu::free(local_offset);
+    cu::free(pins);
+    cu::free(pins_offset);
 
     return result;
 }

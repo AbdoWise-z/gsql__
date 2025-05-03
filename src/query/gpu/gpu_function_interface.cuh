@@ -92,6 +92,8 @@ namespace GFI {
 
     std::vector<size_t> iterator(tensor<char, Device::GPU> *a);
 
+    std::vector<uint32_t> sort(column *col_1);
+
 };
 
 

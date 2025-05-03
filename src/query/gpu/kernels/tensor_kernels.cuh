@@ -5,6 +5,7 @@
 #ifndef TENSOR_KERNALS_CUH
 #define TENSOR_KERNALS_CUH
 
+#include <cstdint>
 
 
 namespace TensorKernel {
@@ -23,6 +24,17 @@ namespace TensorKernel {
     __global__ void efficient_prefix_sum(char* input, size_t* output, int n, size_t* aux);
     __global__ void efficient_prefix_sum(size_t* input, size_t* output, int n, size_t* aux);
     __global__ void add_aux(size_t* input, int n, const size_t* aux);
+
+    __global__ void efficient_prefix_sum(uint32_t* input, uint32_t* output, int n, uint32_t* aux);
+    __global__ void add_aux(uint32_t* input, int n, const uint32_t* aux);
+
+    template<typename T>
+    __global__ void fill_kernel(T* output_data, T value, size_t size) {
+        size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < size) {
+            output_data[idx] = value;
+        }
+    }
 };
 
 

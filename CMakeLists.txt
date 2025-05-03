@@ -149,6 +149,8 @@ add_executable(gsql__
         src/query/gpu/kernels/reduce_kernels.cuh
         src/query/gpu/kernels/helper_kernels.cu
         src/query/gpu/kernels/helper_kernels.cuh
+        src/query/gpu/kernels/order_by.cu
+        src/query/gpu/kernels/order_by.cuh
 )
 
 set_target_properties(gsql__ PROPERTIES

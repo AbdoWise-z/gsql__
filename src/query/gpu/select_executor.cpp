@@ -292,6 +292,7 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
                 final_result->headers.push_back(alias);
 
                 auto col = result.result->columns[idx];
+
                 // now we apply the actual function ..
                 std::string func_name = expr->name;
 
@@ -324,8 +325,66 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
 
     if (::shouldDelete(global_query_input, result.result)) delete result.result;
 
-    // there is no memory leak .. the IDE is tripping.
-    // ReSharper disable once CppDFAMemoryLeak
+
+    auto orderBy = stmnt->order;
+    if (orderBy && orderBy->size() > 1)
+        throw UnsupportedOperationError("Order by is not supported with more than one col");
+
+    if (orderBy && orderBy->size() == 1) {
+        auto order = (*orderBy)[0];
+        auto expr = order->expr;
+
+        std::string col_name = expr->name;
+        std::string table_name;
+
+        if (expr->table != nullptr) {
+            table_name = expr->table; // limit to specific table
+        }
+
+        auto idx = getColumn(&result, table_name, col_name);
+        if (idx == -1) {
+            throw NoSuchColumnError(table_name + "." + col_name);
+        } else if (idx == -2) {
+            throw NoSuchTableError(table_name);
+        }
+
+        auto col = final_result->columns[idx];
+        auto sorted = GFI::sort(col);
+
+        if (order->type == hsql::OrderType::kOrderDesc) {
+            for (uint32_t& i : sorted) {
+                i = sorted.size() - i - 1;
+            }
+        }
+
+        auto final_final_pro_max = new table();
+        final_final_pro_max->headers = final_result->headers;
+
+        for (const auto& _f_col: final_result->columns) {
+            final_final_pro_max->columns.push_back(new column());
+            final_final_pro_max->columns.back()->data = std::vector<tval>(_f_col->data.size());
+            final_final_pro_max->columns.back()->type = _f_col->type;
+        }
+
+        size_t index = 0;
+
+        for (const uint32_t &i : sorted) {
+            for (int j = 0;j < final_final_pro_max->columns.size(); ++j) {
+                final_final_pro_max->columns[j]->data[index] = final_result->columns[j]->data[i];
+            }
+
+            index++;
+        }
+
+        for (const auto& _f_col: final_result->columns) {
+            _f_col->data.clear();
+        }
+
+        delete final_result;
+        final_result = final_final_pro_max;
+    }
+
+
     return {result_tables, final_result};
 }
 
@@ -335,7 +394,6 @@ SelectExecutor::GPU::ConstructionResult SelectExecutor::GPU::ConstructTable(
     const FromResolver::ResolveResult* input
     ) {
 
-    // ReSharper disable once CppDFAMemoryLeak
     auto result = new table();
     std::vector<std::set<std::string>> col_source;
 
