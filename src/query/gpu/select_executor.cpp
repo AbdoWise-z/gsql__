@@ -323,8 +323,6 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
         }
     }
 
-    if (::shouldDelete(global_query_input, result.result)) delete result.result;
-
 
     auto orderBy = stmnt->order;
     if (orderBy && orderBy->size() > 1)
@@ -352,8 +350,10 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
         auto sorted = GFI::sort(col);
 
         if (order->type == hsql::OrderType::kOrderDesc) {
-            for (uint32_t& i : sorted) {
-                i = sorted.size() - i - 1;
+            for (index_t i = 0; i < sorted.size() / 2; i++) {
+                auto k = sorted[i];
+                sorted[i] = sorted[sorted.size() - i - 1];
+                sorted[sorted.size() - i - 1] = k;
             }
         }
 
@@ -366,9 +366,9 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
             final_final_pro_max->columns.back()->type = _f_col->type;
         }
 
-        size_t index = 0;
+        index_t index = 0;
 
-        for (const uint32_t &i : sorted) {
+        for (const index_t &i : sorted) {
             for (int j = 0;j < final_final_pro_max->columns.size(); ++j) {
                 final_final_pro_max->columns[j]->data[index] = final_result->columns[j]->data[i];
             }
@@ -384,6 +384,7 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
         final_result = final_final_pro_max;
     }
 
+    if (::shouldDelete(global_query_input, result.result)) delete result.result;
 
     return {result_tables, final_result};
 }

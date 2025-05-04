@@ -7,6 +7,8 @@
 
 #include <cstdint>
 
+#include "order_by.cuh"
+
 
 namespace TensorKernel {
     __global__ void fill_kernel(char *output_data, char value, size_t size);
@@ -25,8 +27,8 @@ namespace TensorKernel {
     __global__ void efficient_prefix_sum(size_t* input, size_t* output, int n, size_t* aux);
     __global__ void add_aux(size_t* input, int n, const size_t* aux);
 
-    __global__ void efficient_prefix_sum(uint32_t* input, uint32_t* output, int n, uint32_t* aux);
-    __global__ void add_aux(uint32_t* input, int n, const uint32_t* aux);
+    __global__ void efficient_prefix_sum_index_t(index_t* input, index_t* output, int n, index_t* aux);
+    __global__ void add_aux(index_t* input, int n, const index_t* aux);
 
     template<typename T>
     __global__ void fill_kernel(T* output_data, T value, size_t size) {

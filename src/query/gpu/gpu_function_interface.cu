@@ -1112,24 +1112,24 @@ static void run_prefix_sum(char* input, size_t* output, size_t n) {
     cu::free(d_block_sums);
 }
 
-static void run_prefix_sum(uint32_t* input, uint32_t* output, size_t n) {
+static void run_prefix_sum(index_t* input, index_t* output, size_t n) {
     if (n == 0) return;
 
     size_t blocks = (n + Cfg::BlockDim * 2 - 1) / (Cfg::BlockDim * 2);
 
-    auto d_block_sums = static_cast<uint32_t*>(cu::malloc(blocks * sizeof(uint32_t)));
+    auto d_block_sums = static_cast<index_t*>(cu::malloc(blocks * sizeof(index_t)));
 
-    TensorKernel::efficient_prefix_sum<<<blocks, Cfg::BlockDim, (Cfg::BlockDim * 2) * sizeof(size_t)>>>(input, output, n, d_block_sums);
+    TensorKernel::efficient_prefix_sum_index_t<<<blocks, Cfg::BlockDim, (Cfg::BlockDim * 2) * sizeof(index_t)>>>(input, output, n, d_block_sums);
     CUDA_CHECK_LAST_ERROR("TensorKernel::efficient_prefix_sum");
 
     if (blocks > Cfg::BlockDim) {
-        auto r_v = static_cast<uint32_t*>(cu::malloc(blocks * sizeof(uint32_t)));
+        auto r_v = static_cast<index_t*>(cu::malloc(blocks * sizeof(index_t)));
         run_prefix_sum(d_block_sums, r_v, blocks);
         CUDA_CHECK_LAST_ERROR("run_scan::recursive");
         cu::free(d_block_sums);
         d_block_sums = r_v;
     } else {
-        TensorKernel::efficient_prefix_sum<<<1, Cfg::BlockDim, (Cfg::BlockDim * 2) * sizeof(size_t)>>>(d_block_sums, d_block_sums, blocks, nullptr);
+        TensorKernel::efficient_prefix_sum_index_t<<<1, Cfg::BlockDim, (Cfg::BlockDim * 2) * sizeof(index_t)>>>(d_block_sums, d_block_sums, blocks, nullptr);
         CUDA_CHECK_LAST_ERROR("TensorKernel::efficient_prefix_sum");
     }
 
@@ -1212,32 +1212,32 @@ std::vector<size_t> GFI::iterator(tensor<char, Device::GPU> *a) {
     return result;
 }
 
-std::vector<uint32_t> GFI::sort(column *col_1) {
+std::vector<index_t> GFI::sort(column *col_1) {
 
     size_t size = col_1->data.size();
-    std::vector<uint32_t> result(size, 0);
+    std::vector<index_t> result(size, 0);
 
     dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
 
-    auto indices_in  = static_cast<uint32_t*>(cu::malloc(sizeof(uint32_t) * size));
-    auto indices_out = static_cast<uint32_t*>(cu::malloc(sizeof(uint32_t) * size));
+    auto indices_in  = static_cast<index_t*>(cu::malloc(sizeof(index_t) * size));
+    auto indices_out = static_cast<index_t*>(cu::malloc(sizeof(index_t) * size));
 
     auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
     CUDA_CHECK_LAST_ERROR("GFI::sort pool.getBufferOrCreate columnPoolAllocator");
 
     auto maskSize = Cfg::radixIntegerMaskSize;
-    uint32_t numPins  = (1 << maskSize);
-    uint32_t maskBits = (1 << maskSize) - 1;
+    index_t numPins  = (1 << maskSize);
+    index_t maskBits = (1 << maskSize) - 1;
 
-    uint32_t shiftBits = 0;
+    index_t shiftBits = 0;
 
-    auto histogram     = static_cast<uint32_t*>(cu::malloc(sizeof(uint32_t) * numPins));
-    auto pins_offset   = static_cast<uint32_t*>(cu::malloc(sizeof(uint32_t) * numPins));
-    auto pins          = static_cast<uint32_t*>(cu::malloc(sizeof(uint32_t) * size * numPins));
-    auto local_offset  = static_cast<uint32_t*>(cu::malloc(sizeof(uint32_t) * size * numPins));
+    auto histogram     = static_cast<index_t*>(cu::malloc(sizeof(index_t) * numPins));
+    auto pins_offset   = static_cast<index_t*>(cu::malloc(sizeof(index_t) * numPins));
+    auto pins          = static_cast<index_t*>(cu::malloc(sizeof(index_t) * size * numPins));
+    auto local_offset  = static_cast<index_t*>(cu::malloc(sizeof(index_t) * size * numPins));
 
-    std::vector<uint32_t> observer(size * numPins, 0);
-    std::vector<uint32_t> observer2(size * numPins, 0);
+    std::vector<index_t> observer(size * numPins, 0);
+    std::vector<index_t> observer2(size * numPins, 0);
 
     // initialize
     for (size_t i = 0;i < size;i++) {
@@ -1245,13 +1245,13 @@ std::vector<uint32_t> GFI::sort(column *col_1) {
     }
 
     // move initial data
-    cu::toDevice(result.data(), indices_in, sizeof(uint32_t) * size);
+    cu::toDevice(result.data(), indices_in, sizeof(index_t) * size);
 
     // now do sorting
     while (shiftBits < sizeof(int64_t) * 8) {
         // do histogram
-        TensorKernel::fill_kernel<<<(numPins + Cfg::BlockDim - 1) / Cfg::BlockDim ,Cfg::BlockDim>>>(histogram, (uint32_t) 0, numPins);
-        OrderBy::histogram_kernel_indexed<<<grid, Cfg::BlockDim, sizeof(uint32_t) * numPins>>>(
+        TensorKernel::fill_kernel<<<(numPins + Cfg::BlockDim - 1) / Cfg::BlockDim ,Cfg::BlockDim>>>(histogram, (index_t) 0, numPins);
+        OrderBy::histogram_kernel_indexed<<<grid, Cfg::BlockDim, sizeof(index_t) * numPins>>>(
             static_cast<int64_t*>(_col_1),
             indices_in,
             histogram,
@@ -1261,10 +1261,10 @@ std::vector<uint32_t> GFI::sort(column *col_1) {
             shiftBits,
             numPins
         );
-        CUDA_CHECK_LAST_ERROR("GFI::sort OrderBy::histogram_kernel_indexed<<<grid, Cfg::BlockDim, sizeof(uint32_t) * numPins>>>");
+        CUDA_CHECK_LAST_ERROR("GFI::sort OrderBy::histogram_kernel_indexed<<<grid, Cfg::BlockDim, sizeof(index_t) * numPins>>>");
 
-        cu::toHost(histogram, result.data(), sizeof(uint32_t) * std::min(numPins, (uint32_t) size));
-        cu::toHost(pins, observer.data(), sizeof(uint32_t) * size * numPins);
+        cu::toHost(histogram, result.data(), sizeof(index_t) * std::min(numPins, (index_t) size));
+        cu::toHost(pins, observer.data(), sizeof(index_t) * size * numPins);
         for (int i = 0;i < size;i++) {
             int idx = 0;
             for (int j = 0 ;j < numPins;j++) {
@@ -1286,8 +1286,8 @@ std::vector<uint32_t> GFI::sort(column *col_1) {
         run_prefix_sum(histogram, pins_offset, numPins);
         CUDA_CHECK_LAST_ERROR("GFI::sort run_prefix_sum");
 
-        cu::toHost(pins_offset, result.data(), sizeof(uint32_t) * std::min(numPins, (uint32_t) size));
-        cu::toHost(local_offset, observer2.data(), sizeof(uint32_t) * size * numPins);
+        cu::toHost(pins_offset, result.data(), sizeof(index_t) * std::min(numPins, (index_t) size));
+        cu::toHost(local_offset, observer2.data(), sizeof(index_t) * size * numPins);
         CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
 
         // do radix
@@ -1302,7 +1302,7 @@ std::vector<uint32_t> GFI::sort(column *col_1) {
             shiftBits
         );
         CUDA_CHECK_LAST_ERROR("GFI::sort OrderBy::radix_scatter_pass<<<grid, Cfg::BlockDim>>>");
-        cu::toHost(indices_out, result.data(), sizeof(uint32_t) * size);
+        cu::toHost(indices_out, result.data(), sizeof(index_t) * size);
         CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
 
         auto temp = indices_in;
@@ -1312,7 +1312,7 @@ std::vector<uint32_t> GFI::sort(column *col_1) {
         shiftBits += maskSize;
     }
 
-    cu::toHost(indices_in, result.data(), sizeof(uint32_t) * size);
+    cu::toHost(indices_in, result.data(), sizeof(index_t) * size);
 
     cu::free(indices_in);
     cu::free(indices_out);

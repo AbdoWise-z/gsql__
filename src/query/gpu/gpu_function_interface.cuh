@@ -92,7 +92,7 @@ namespace GFI {
 
     std::vector<size_t> iterator(tensor<char, Device::GPU> *a);
 
-    std::vector<uint32_t> sort(column *col_1);
+    std::vector<unsigned long long int> sort(column *col_1);
 
 };
 

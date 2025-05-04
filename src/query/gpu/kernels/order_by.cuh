@@ -8,27 +8,29 @@
 #include <cstdint>
 
 
+typedef unsigned long long int index_t;
+
 namespace OrderBy {
 
     __global__ void histogram_kernel_indexed(
-        const int64_t* data,
-        const uint32_t* indices,
-        uint32_t* histogram,
-        uint32_t* pins,
+        const int64_t*  data,
+        const index_t* indices,
+        index_t* histogram,
+        index_t* pins,
         size_t num_elements,
-        uint32_t mask_bits,
-        uint32_t shift_bits,
-        uint32_t num_pins);
+        index_t mask_bits,
+        index_t shift_bits,
+        index_t num_pins);
 
     __global__ void radix_scatter_pass(
         const  int64_t* data,
-        const uint32_t* indices_in,
-              uint32_t* indices_out,
-        uint32_t* pin_offsets,        // size: num_bins, initialized from prefix_sums
-        uint32_t* local_offsets,
+        const index_t* indices_in,
+              index_t* indices_out,
+        index_t* pin_offsets,        // size: num_bins, initialized from prefix_sums
+        index_t* local_offsets,
         size_t num_elements,
-        uint32_t mask_bits,
-        uint32_t shift_bits
+        index_t mask_bits,
+        index_t shift_bits
         );
 
     // kinda efficient :clown:
