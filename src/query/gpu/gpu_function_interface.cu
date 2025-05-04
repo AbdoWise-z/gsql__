@@ -12,6 +12,7 @@
 #include "kernels/order_by.cuh"
 #include "kernels/reduce_kernels.cuh"
 #include "kernels/tensor_kernels.cuh"
+#include "query/errors.hpp"
 #include "utils/murmur_hash3_cuda.cuh"
 
 
@@ -1212,7 +1213,8 @@ std::vector<size_t> GFI::iterator(tensor<char, Device::GPU> *a) {
     return result;
 }
 
-std::vector<index_t> GFI::sort(column *col_1) {
+static std::vector<index_t> sort_int64_t(column* col_1) {
+    if (col_1->type != INTEGER) throw UnsupportedOperationError("Sort of type int on non-integer");
 
     size_t size = col_1->data.size();
     std::vector<index_t> result(size, 0);
@@ -1222,8 +1224,9 @@ std::vector<index_t> GFI::sort(column *col_1) {
     auto indices_in  = static_cast<index_t*>(cu::malloc(sizeof(index_t) * size));
     auto indices_out = static_cast<index_t*>(cu::malloc(sizeof(index_t) * size));
 
-    auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
-    CUDA_CHECK_LAST_ERROR("GFI::sort pool.getBufferOrCreate columnPoolAllocator");
+    auto _col_1      = static_cast<int64_t*>(cu::malloc(sizeof(int64_t) * size));
+    cu::toDevice(col_1->data.data(), _col_1, size * sizeof(int64_t));
+    CUDA_CHECK_LAST_ERROR("GFI::sort move col");
 
     auto maskSize = Cfg::radixIntegerMaskSize;
     index_t numPins  = (1 << maskSize);
@@ -1236,8 +1239,8 @@ std::vector<index_t> GFI::sort(column *col_1) {
     auto pins          = static_cast<index_t*>(cu::malloc(sizeof(index_t) * size * numPins));
     auto local_offset  = static_cast<index_t*>(cu::malloc(sizeof(index_t) * size * numPins));
 
-    std::vector<index_t> observer(size * numPins, 0);
-    std::vector<index_t> observer2(size * numPins, 0);
+    // std::vector<index_t> observer(size * numPins, 0);
+    // std::vector<index_t> observer2(size * numPins, 0);
 
     // initialize
     for (size_t i = 0;i < size;i++) {
@@ -1263,19 +1266,19 @@ std::vector<index_t> GFI::sort(column *col_1) {
         );
         CUDA_CHECK_LAST_ERROR("GFI::sort OrderBy::histogram_kernel_indexed<<<grid, Cfg::BlockDim, sizeof(index_t) * numPins>>>");
 
-        cu::toHost(histogram, result.data(), sizeof(index_t) * std::min(numPins, (index_t) size));
-        cu::toHost(pins, observer.data(), sizeof(index_t) * size * numPins);
-        for (int i = 0;i < size;i++) {
-            int idx = 0;
-            for (int j = 0 ;j < numPins;j++) {
-                if (observer[i + size * j]) {
-                    idx = j; break;
-                }
-            }
-
-            observer[i] = idx;
-        }
-        CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
+        // cu::toHost(histogram, result.data(), sizeof(index_t) * std::min(numPins, (index_t) size));
+        // cu::toHost(pins, observer.data(), sizeof(index_t) * size * numPins);
+        // for (int i = 0;i < size;i++) {
+        //     int idx = 0;
+        //     for (int j = 0 ;j < numPins;j++) {
+        //         if (observer[i + size * j]) {
+        //             idx = j; break;
+        //         }
+        //     }
+        //
+        //     observer[i] = idx;
+        // }
+        // CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
 
         // do prefix
         for (size_t i = 0;i < numPins;i++) {
@@ -1286,9 +1289,9 @@ std::vector<index_t> GFI::sort(column *col_1) {
         run_prefix_sum(histogram, pins_offset, numPins);
         CUDA_CHECK_LAST_ERROR("GFI::sort run_prefix_sum");
 
-        cu::toHost(pins_offset, result.data(), sizeof(index_t) * std::min(numPins, (index_t) size));
-        cu::toHost(local_offset, observer2.data(), sizeof(index_t) * size * numPins);
-        CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
+        // cu::toHost(pins_offset, result.data(), sizeof(index_t) * std::min(numPins, (index_t) size));
+        // cu::toHost(local_offset, observer2.data(), sizeof(index_t) * size * numPins);
+        // CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
 
         // do radix
         OrderBy::radix_scatter_pass<<<grid, Cfg::BlockDim>>>(
@@ -1302,8 +1305,8 @@ std::vector<index_t> GFI::sort(column *col_1) {
             shiftBits
         );
         CUDA_CHECK_LAST_ERROR("GFI::sort OrderBy::radix_scatter_pass<<<grid, Cfg::BlockDim>>>");
-        cu::toHost(indices_out, result.data(), sizeof(index_t) * size);
-        CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
+        // cu::toHost(indices_out, result.data(), sizeof(index_t) * size);
+        // CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
 
         auto temp = indices_in;
         indices_in = indices_out;
@@ -1321,6 +1324,407 @@ std::vector<index_t> GFI::sort(column *col_1) {
     cu::free(local_offset);
     cu::free(pins);
     cu::free(pins_offset);
+    cu::free(_col_1);
 
     return result;
+}
+
+static std::vector<index_t> sort_double_t(column* col_1) {
+    if (col_1->type != FLOAT) throw UnsupportedOperationError("Sort of type float on non-float");
+
+    size_t size = col_1->data.size();
+    std::vector<index_t> result(size, 0);
+
+    dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
+
+    auto indices_in  = static_cast<index_t*>(cu::malloc(sizeof(index_t) * size));
+    auto indices_out = static_cast<index_t*>(cu::malloc(sizeof(index_t) * size));
+
+    auto _col_1      = static_cast<int64_t*>(cu::malloc(sizeof(int64_t) * size));
+    std::vector<uint64_t> col_data(col_1->data.size(), 0);
+    for (int i = 0;i < col_1->data.size();i++) {
+        uint64_t bits = *reinterpret_cast<const uint64_t *>(&col_1->data[i].d);
+        col_data[i] = (bits & 0x8000000000000000ULL) ? ~bits : (bits ^ 0x8000000000000000ULL);
+    }
+    cu::toDevice(col_data.data(), _col_1, size * sizeof(uint64_t));
+    CUDA_CHECK_LAST_ERROR("GFI::sort move col");
+
+    auto maskSize = Cfg::radixIntegerMaskSize;
+    index_t numPins  = (1 << maskSize);
+    index_t maskBits = (1 << maskSize) - 1;
+
+    index_t shiftBits = 0;
+
+    auto histogram     = static_cast<index_t*>(cu::malloc(sizeof(index_t) * numPins));
+    auto pins_offset   = static_cast<index_t*>(cu::malloc(sizeof(index_t) * numPins));
+    auto pins          = static_cast<index_t*>(cu::malloc(sizeof(index_t) * size * numPins));
+    auto local_offset  = static_cast<index_t*>(cu::malloc(sizeof(index_t) * size * numPins));
+
+    // std::vector<index_t> observer(size * numPins, 0);
+    // std::vector<index_t> observer2(size * numPins, 0);
+
+    // initialize
+    for (size_t i = 0;i < size;i++) {
+        result[i] = i;
+    }
+
+    // move initial data
+    cu::toDevice(result.data(), indices_in, sizeof(index_t) * size);
+
+    // now do sorting
+    while (shiftBits < sizeof(int64_t) * 8) {
+        // do histogram
+        TensorKernel::fill_kernel<<<(numPins + Cfg::BlockDim - 1) / Cfg::BlockDim ,Cfg::BlockDim>>>(histogram, (index_t) 0, numPins);
+        OrderBy::histogram_kernel_indexed<<<grid, Cfg::BlockDim, sizeof(index_t) * numPins>>>(
+            static_cast<int64_t*>(_col_1),
+            indices_in,
+            histogram,
+            pins,
+            size,
+            maskBits,
+            shiftBits,
+            numPins
+        );
+        CUDA_CHECK_LAST_ERROR("GFI::sort OrderBy::histogram_kernel_indexed<<<grid, Cfg::BlockDim, sizeof(index_t) * numPins>>>");
+
+        // cu::toHost(histogram, result.data(), sizeof(index_t) * std::min(numPins, (index_t) size));
+        // cu::toHost(pins, observer.data(), sizeof(index_t) * size * numPins);
+        // for (int i = 0;i < size;i++) {
+        //     int idx = 0;
+        //     for (int j = 0 ;j < numPins;j++) {
+        //         if (observer[i + size * j]) {
+        //             idx = j; break;
+        //         }
+        //     }
+        //
+        //     observer[i] = idx;
+        // }
+        // CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
+
+        // do prefix
+        for (size_t i = 0;i < numPins;i++) {
+            const auto offset = size * i;
+            run_prefix_sum(pins + offset, local_offset + offset, size);
+        }
+        CUDA_CHECK_LAST_ERROR("GFI::sort run_prefix_sum local");
+        run_prefix_sum(histogram, pins_offset, numPins);
+        CUDA_CHECK_LAST_ERROR("GFI::sort run_prefix_sum");
+
+        // cu::toHost(pins_offset, result.data(), sizeof(index_t) * std::min(numPins, (index_t) size));
+        // cu::toHost(local_offset, observer2.data(), sizeof(index_t) * size * numPins);
+        // CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
+
+        // do radix
+        OrderBy::radix_scatter_pass<<<grid, Cfg::BlockDim>>>(
+            static_cast<int64_t*>(_col_1),
+            indices_in,
+            indices_out,
+            pins_offset,
+            local_offset,
+            size,
+            maskBits,
+            shiftBits
+        );
+        CUDA_CHECK_LAST_ERROR("GFI::sort OrderBy::radix_scatter_pass<<<grid, Cfg::BlockDim>>>");
+        // cu::toHost(indices_out, result.data(), sizeof(index_t) * size);
+        // CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
+
+        auto temp = indices_in;
+        indices_in = indices_out;
+        indices_out = temp;
+
+        shiftBits += maskSize;
+    }
+
+    cu::toHost(indices_in, result.data(), sizeof(index_t) * size);
+
+    cu::free(indices_in);
+    cu::free(indices_out);
+
+    cu::free(histogram);
+    cu::free(local_offset);
+    cu::free(pins);
+    cu::free(pins_offset);
+    cu::free(_col_1);
+
+    return result;
+}
+
+
+static std::vector<index_t> sort_dt_t(column* col_1) {
+    if (col_1->type != DateTime) throw UnsupportedOperationError("Sort of type DateTime on non-DateTime");
+
+    size_t size = col_1->data.size();
+    std::vector<index_t> result(size, 0);
+
+    dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
+
+    auto indices_in  = static_cast<index_t*>(cu::malloc(sizeof(index_t) * size));
+    auto indices_out = static_cast<index_t*>(cu::malloc(sizeof(index_t) * size));
+
+    auto _col_1      = static_cast<int64_t*>(cu::malloc(sizeof(int64_t) * size));
+    std::vector<uint64_t> col_data(col_1->data.size(), 0);
+    for (int i = 0;i < col_1->data.size();i++) {
+        const auto dt = *(col_1->data[i].t);
+        const uint64_t bits = dt.year * 31104000 + dt.month * 2592000 + dt.day * 86000 + dt.hour * 3600 + dt.minute * 60 + dt.second;
+        col_data[i] = bits;
+    }
+    cu::toDevice(col_data.data(), _col_1, size * sizeof(uint64_t));
+    CUDA_CHECK_LAST_ERROR("GFI::sort move col");
+
+    auto maskSize = Cfg::radixIntegerMaskSize;
+    index_t numPins  = (1 << maskSize);
+    index_t maskBits = (1 << maskSize) - 1;
+
+    index_t shiftBits = 0;
+
+    auto histogram     = static_cast<index_t*>(cu::malloc(sizeof(index_t) * numPins));
+    auto pins_offset   = static_cast<index_t*>(cu::malloc(sizeof(index_t) * numPins));
+    auto pins          = static_cast<index_t*>(cu::malloc(sizeof(index_t) * size * numPins));
+    auto local_offset  = static_cast<index_t*>(cu::malloc(sizeof(index_t) * size * numPins));
+
+    // std::vector<index_t> observer(size * numPins, 0);
+    // std::vector<index_t> observer2(size * numPins, 0);
+
+    // initialize
+    for (size_t i = 0;i < size;i++) {
+        result[i] = i;
+    }
+
+    // move initial data
+    cu::toDevice(result.data(), indices_in, sizeof(index_t) * size);
+
+    // now do sorting
+    while (shiftBits < sizeof(int64_t) * 8) {
+        // do histogram
+        TensorKernel::fill_kernel<<<(numPins + Cfg::BlockDim - 1) / Cfg::BlockDim ,Cfg::BlockDim>>>(histogram, (index_t) 0, numPins);
+        OrderBy::histogram_kernel_indexed<<<grid, Cfg::BlockDim, sizeof(index_t) * numPins>>>(
+            static_cast<int64_t*>(_col_1),
+            indices_in,
+            histogram,
+            pins,
+            size,
+            maskBits,
+            shiftBits,
+            numPins
+        );
+        CUDA_CHECK_LAST_ERROR("GFI::sort OrderBy::histogram_kernel_indexed<<<grid, Cfg::BlockDim, sizeof(index_t) * numPins>>>");
+
+        // cu::toHost(histogram, result.data(), sizeof(index_t) * std::min(numPins, (index_t) size));
+        // cu::toHost(pins, observer.data(), sizeof(index_t) * size * numPins);
+        // for (int i = 0;i < size;i++) {
+        //     int idx = 0;
+        //     for (int j = 0 ;j < numPins;j++) {
+        //         if (observer[i + size * j]) {
+        //             idx = j; break;
+        //         }
+        //     }
+        //
+        //     observer[i] = idx;
+        // }
+        // CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
+
+        // do prefix
+        for (size_t i = 0;i < numPins;i++) {
+            const auto offset = size * i;
+            run_prefix_sum(pins + offset, local_offset + offset, size);
+        }
+        CUDA_CHECK_LAST_ERROR("GFI::sort run_prefix_sum local");
+        run_prefix_sum(histogram, pins_offset, numPins);
+        CUDA_CHECK_LAST_ERROR("GFI::sort run_prefix_sum");
+
+        // cu::toHost(pins_offset, result.data(), sizeof(index_t) * std::min(numPins, (index_t) size));
+        // cu::toHost(local_offset, observer2.data(), sizeof(index_t) * size * numPins);
+        // CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
+
+        // do radix
+        OrderBy::radix_scatter_pass<<<grid, Cfg::BlockDim>>>(
+            static_cast<int64_t*>(_col_1),
+            indices_in,
+            indices_out,
+            pins_offset,
+            local_offset,
+            size,
+            maskBits,
+            shiftBits
+        );
+        CUDA_CHECK_LAST_ERROR("GFI::sort OrderBy::radix_scatter_pass<<<grid, Cfg::BlockDim>>>");
+        // cu::toHost(indices_out, result.data(), sizeof(index_t) * size);
+        // CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
+
+        auto temp = indices_in;
+        indices_in = indices_out;
+        indices_out = temp;
+
+        shiftBits += maskSize;
+    }
+
+    cu::toHost(indices_in, result.data(), sizeof(index_t) * size);
+
+    cu::free(indices_in);
+    cu::free(indices_out);
+
+    cu::free(histogram);
+    cu::free(local_offset);
+    cu::free(pins);
+    cu::free(pins_offset);
+    cu::free(_col_1);
+
+    return result;
+}
+
+
+static std::vector<index_t> sort_string_t(column* col) {
+    if (col->type != STRING) throw UnsupportedOperationError("Sort of type String on non-String");
+
+    size_t size = col->data.size();
+    std::vector<index_t> result(size, 0);
+
+    dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
+
+    auto indices_in  = static_cast<index_t*>(cu::malloc(sizeof(index_t) * size));
+    auto indices_out = static_cast<index_t*>(cu::malloc(sizeof(index_t) * size));
+
+    std::vector<void*>  ptrs(col->data.size(), nullptr);
+    std::vector<size_t> sizes(col->data.size(), 0);
+
+    index_t max_string_size = 0;
+    for (size_t i = 0; i < size; ++i) {
+        std::string* str = col->data[i].s;
+        auto gpu_str = cu::malloc(str->size() + 1);
+        cu::toDevice(str->c_str(), gpu_str, str->size() + 1);
+        ptrs[i]  = gpu_str;
+        sizes[i] = str->size();
+        if (str->size() > max_string_size) {
+            max_string_size = str->size();
+        }
+    }
+    auto _col_data  = static_cast<const char**>(cu::malloc(sizeof(char**) * size));
+    auto _col_sizes = static_cast<size_t*>(cu::malloc(sizeof(size_t) * size));
+    cu::toDevice(ptrs.data(), _col_data, sizeof(char**) * size);
+    cu::toDevice(sizes.data(), _col_sizes, sizeof(size_t) * size);
+    CUDA_CHECK_LAST_ERROR("GFI::sort move col");
+
+    auto maskSize = 8;
+    index_t numPins  = (1 << maskSize);
+    index_t maskBits = (1 << maskSize) - 1;
+
+    index_t curr_char = 0;
+
+    auto histogram     = static_cast<index_t*>(cu::malloc(sizeof(index_t) * numPins));
+    auto pins_offset   = static_cast<index_t*>(cu::malloc(sizeof(index_t) * numPins));
+    auto pins          = static_cast<index_t*>(cu::malloc(sizeof(index_t) * size * numPins));
+    auto local_offset  = static_cast<index_t*>(cu::malloc(sizeof(index_t) * size * numPins));
+
+    // std::vector<index_t> observer(size * numPins, 0);
+    // std::vector<index_t> observer2(size * numPins, 0);
+
+    // initialize
+    for (size_t i = 0;i < size;i++) {
+        result[i] = i;
+    }
+
+    // move initial data
+    cu::toDevice(result.data(), indices_in, sizeof(index_t) * size);
+
+    // now do sorting
+    while (curr_char < max_string_size) {
+        // do histogram
+        TensorKernel::fill_kernel<<<(numPins + Cfg::BlockDim - 1) / Cfg::BlockDim ,Cfg::BlockDim>>>(histogram, (index_t) 0, numPins);
+        OrderBy::histogram_kernel_indexed<<<grid, Cfg::BlockDim>>>(
+            _col_data,
+            _col_sizes,
+            indices_in,
+            histogram,
+            pins,
+            size,
+            curr_char,
+            max_string_size
+        );
+        CUDA_CHECK_LAST_ERROR("GFI::sort OrderBy::histogram_kernel_indexed<<<grid, Cfg::BlockDim>>>");
+
+        // cu::toHost(histogram, result.data(), sizeof(index_t) * std::min(numPins, (index_t) size));
+        // cu::toHost(pins, observer.data(), sizeof(index_t) * size * numPins);
+        // for (int i = 0;i < size;i++) {
+        //     int idx = 0;
+        //     for (int j = 0 ;j < numPins;j++) {
+        //         if (observer[i + size * j]) {
+        //             idx = j; break;
+        //         }
+        //     }
+        //
+        //     observer[i] = idx;
+        // }
+        // CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
+
+        // do prefix
+        for (size_t i = 0;i < numPins;i++) {
+            const auto offset = size * i;
+            run_prefix_sum(pins + offset, local_offset + offset, size);
+        }
+        CUDA_CHECK_LAST_ERROR("GFI::sort run_prefix_sum local");
+        run_prefix_sum(histogram, pins_offset, numPins);
+        CUDA_CHECK_LAST_ERROR("GFI::sort run_prefix_sum");
+
+        // cu::toHost(pins_offset, result.data(), sizeof(index_t) * std::min(numPins, (index_t) size));
+        // cu::toHost(local_offset, observer2.data(), sizeof(index_t) * size * numPins);
+        // CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
+
+        // do radix
+        OrderBy::radix_scatter_pass<<<grid, Cfg::BlockDim>>>(
+            _col_data,
+             _col_sizes,
+            indices_in,
+            indices_out,
+            pins_offset,
+            local_offset,
+            size,
+            curr_char,
+            max_string_size
+        );
+        CUDA_CHECK_LAST_ERROR("GFI::sort OrderBy::radix_scatter_pass<<<grid, Cfg::BlockDim>>>");
+        // cu::toHost(indices_out, result.data(), sizeof(index_t) * size);
+        // CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
+
+        auto temp = indices_in;
+        indices_in = indices_out;
+        indices_out = temp;
+
+        curr_char += 1;
+    }
+
+    cu::toHost(indices_in, result.data(), sizeof(index_t) * size);
+
+    cu::free(indices_in);
+    cu::free(indices_out);
+
+    cu::free(histogram);
+    cu::free(local_offset);
+    cu::free(pins);
+    cu::free(pins_offset);
+
+    for (const auto item: ptrs) {
+        cu::free(item);
+    }
+
+    cu::free(_col_data);
+    cu::free(_col_sizes);
+
+    return result;
+}
+
+
+std::vector<index_t> GFI::sort(column *col_1) {
+    switch (col_1->type) {
+        case INTEGER:
+            return sort_int64_t(col_1);
+        case FLOAT:
+            return sort_double_t(col_1);
+        case STRING:
+            return sort_string_t(col_1);
+        case DateTime:
+            return sort_dt_t(col_1);
+    }
+
+    throw UnsupportedOperationError("Sort failed, unknown col type.");
 }

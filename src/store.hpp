@@ -63,7 +63,6 @@ namespace Cfg {
     extern size_t useAccelerator;
 
     extern size_t radixIntegerMaskSize;
-    extern size_t radixStringMaskSize;
 
     std::vector<size_t> getTileSizeFor(const std::vector<size_t>& inputSize);
 }

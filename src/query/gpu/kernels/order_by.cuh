@@ -33,6 +33,28 @@ namespace OrderBy {
         index_t shift_bits
         );
 
+    __global__ void histogram_kernel_indexed(
+        const char**  data,
+        const size_t*  data_sizes,
+        const index_t* indices,
+        index_t* histogram,
+        index_t* pins,
+        size_t num_elements,
+        index_t index,
+        index_t maxLength);
+
+    __global__ void radix_scatter_pass(
+        const char**  data,
+        const size_t*  data_sizes,
+        const index_t* indices_in,
+              index_t* indices_out,
+        const index_t* pin_offsets,        // size: num_bins, initialized from prefix_sums
+        const index_t* local_offsets,
+        size_t num_elements,
+        index_t index,
+        index_t maxLength
+        );
+
     // kinda efficient :clown:
     __global__ void efficient_local_prefix_sum(const uint32_t* input, uint32_t* output, int n, int pins, uint32_t* aux);
 

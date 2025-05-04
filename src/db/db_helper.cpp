@@ -27,9 +27,10 @@ static std::vector<DataType> inferTypes(const csv::CSVRow& row) {
             case csv::DataType::CSV_INT64:
                 types.push_back(INTEGER);
                 break;
+            case csv::DataType::UNKNOWN:
             case csv::DataType::CSV_DOUBLE:
                 types.push_back(FLOAT);
-
+                break;
             default:
                 throw std::runtime_error("Not implemented");
         }
@@ -78,7 +79,8 @@ table * fromCSV(std::string path) {
                 case csv::DataType::CSV_INT64:
                     val.i = field.get<int64_t>();
                     break;
-                case csv::DataType::CSV_DOUBLE:
+                case csv::DataType::UNKNOWN:
+                case csv::DataType::CSV_DOUBLE: // fixme: I just assume it's double ..
                     val.d = field.get<double>();
                     break;
                 default:

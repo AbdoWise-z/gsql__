@@ -5,14 +5,14 @@
 #include "order_by.cuh"
 
 __global__ void OrderBy::histogram_kernel_indexed(
-    const int64_t*  data,
-    const index_t* indices,
-    index_t* histogram,
-    index_t* pins,
-    size_t num_elements,
-    index_t mask_bits,
-    index_t shift_bits,
-    index_t num_pins
+        const int64_t*  data,
+        const index_t* indices,
+        index_t* histogram,
+        index_t* pins,
+        size_t num_elements,
+        index_t mask_bits,
+        index_t shift_bits,
+        index_t num_pins
     ) {
 
     extern __shared__ index_t shared_hist[];
@@ -44,8 +44,8 @@ __global__ void OrderBy::histogram_kernel_indexed(
 
     __syncthreads();
 
-    for (uint32_t i = threadIdx.x; i < num_pins; i += blockDim.x) {
-        atomicAdd(&histogram[i], (uint32_t) shared_hist[i]);
+    for (index_t i = threadIdx.x; i < num_pins; i += blockDim.x) {
+        atomicAdd(&histogram[i], shared_hist[i]);
     }
 }
 
@@ -68,6 +68,73 @@ __global__ void OrderBy::radix_scatter_pass(
         index_t idx = indices_in[i];
         int64_t sample = data[idx];
         index_t pin = (sample >> shift_bits) & mask_bits;
+
+        index_t pos = (pin == 0 ? 0 : pin_offsets[pin - 1]) + local_offsets[i + pin * num_elements] - 1;
+        indices_out[pos] = idx;
+    }
+}
+
+__global__ void OrderBy::histogram_kernel_indexed(
+        const char**  data,
+        const size_t*  data_sizes,
+        const index_t* indices,
+        index_t* histogram,
+        index_t* pins,
+        size_t num_elements,
+        index_t index,
+        index_t maxLength
+    ) {
+    __shared__ index_t shared_hist[256];
+
+    for (index_t i = threadIdx.x; i < 256; i += blockDim.x) {
+        shared_hist[i] = 0;
+    }
+
+    __syncthreads();
+
+    for (
+        index_t i = threadIdx.x + blockIdx.x * blockDim.x;
+        i < num_elements;
+        i += blockDim.x * gridDim.x) {
+
+
+        index_t idx   = indices[i];
+        index_t size = data_sizes[idx];
+        index = maxLength - index - 1;
+        index = (index < size) * index + (index >= size) * size;
+        char sample = data[idx][index];
+        index_t pin = sample;
+
+        for (int j = 0;j < 256;j++) {
+            pins[i + num_elements * j] = 0;
+        }
+
+        pins[i + pin * num_elements] = 1;
+
+        atomicAdd(&shared_hist[pin], (index_t) 1);
+
+    }
+
+    __syncthreads();
+
+    for (index_t i = threadIdx.x; i < 256; i += blockDim.x) {
+        atomicAdd(&histogram[i], shared_hist[i]);
+    }
+}
+
+__global__ void OrderBy::radix_scatter_pass(const char **data, const size_t *data_sizes, const index_t *indices_in,
+    index_t *indices_out, const index_t *pin_offsets, const index_t *local_offsets, size_t num_elements, index_t index, index_t maxLength) {
+    for (
+        index_t i = threadIdx.x + blockIdx.x * blockDim.x;
+        i < num_elements;
+        i += blockDim.x * gridDim.x) {
+
+        index_t idx   = indices_in[i];
+        index_t size = data_sizes[idx];
+        index = maxLength - index - 1;
+        index = (index < size) * index + (index >= size) * size;
+        char sample = data[idx][index];
+        index_t pin = sample;
 
         index_t pos = (pin == 0 ? 0 : pin_offsets[pin - 1]) + local_offsets[i + pin * num_elements] - 1;
         indices_out[pos] = idx;
