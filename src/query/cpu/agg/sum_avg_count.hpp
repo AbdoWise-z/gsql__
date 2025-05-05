@@ -8,10 +8,13 @@
 #include "db/value_helper.hpp"
 
 
+class table;
+
 namespace Agg::CPU {
     tval sum(column* col);
     tval avg(column* col);
     tval count(const column* col);
+    tval count(const table *t);
 }
 
 

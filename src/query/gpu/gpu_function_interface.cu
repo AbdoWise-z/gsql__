@@ -991,12 +991,13 @@ tval GFI::avg(column *col_1) {
     auto _s = sum(col_1);
     switch (col_1->type) {
         case INTEGER:
-            _s.i = _s.i / col_1->data.size();
+            _s.d = static_cast<float>(_s.i) / col_1->data.size();
             break;
         case FLOAT:
             _s.d = _s.d / col_1->data.size();
             break;
         case DateTime:
+            throw std::runtime_error("Unsupported column type"); // fixme: maybe ?
             _s.t->day = _s.t->day / col_1->data.size();
             _s.t->month = _s.t->month / col_1->data.size();
             _s.t->year = _s.t->year / col_1->data.size();

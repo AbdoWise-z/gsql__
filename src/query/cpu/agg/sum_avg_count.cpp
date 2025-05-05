@@ -5,6 +5,7 @@
 #include "sum_avg_count.hpp"
 
 #include "query/errors.hpp"
+#include "db/table.hpp"
 
 tval Agg::CPU::sum(column *col) {
     if (col->type == STRING)
@@ -62,4 +63,8 @@ tval Agg::CPU::avg(column *col) {
 
 tval Agg::CPU::count(const column *col) {
     return ValuesHelper::create_from(static_cast<int64_t>(col->data.size()));
+}
+
+tval Agg::CPU::count(const table *t) {
+    return ValuesHelper::create_from(static_cast<int64_t>(t->size()));
 }
