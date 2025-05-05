@@ -11,48 +11,6 @@
 #include "store.hpp"
 #include "query/errors.hpp"
 
-FromResolver::ResolveResult FromResolver::GPU::merge(ResolveResult *a, ResolveResult *b) {
-    ResolveResult result;
-    for (int i = 0;i < a->table_names.size();i++) { // add a normally
-        auto names = a->table_names[i];
-        auto table = a->tables[i];
-        auto temporary = a->isTemporary[i];
-
-        result.table_names.push_back(names);
-        result.tables.push_back(table);
-        result.isTemporary.push_back(temporary);
-    }
-
-    for (int i = 0;i < b->table_names.size();i++) {
-        auto names = b->table_names[i];
-        auto table = b->tables[i];
-        auto temporary = b->isTemporary[i];
-
-        // we need to check for dubs
-        for (auto name: names) {
-            auto k = FromResolver::GPU::find(&result, name);
-            if (k != -1) {
-                throw std::runtime_error("Duplicate table name: " + name);
-            }
-        }
-
-        result.table_names.push_back(names);
-        result.tables.push_back(table);
-        result.isTemporary.push_back(temporary);
-    }
-
-    return result;
-}
-
-int FromResolver::GPU::find(ResolveResult *a, std::string tname) {
-    for (int i = 0;i < a->table_names.size();i++) {
-        if (a->table_names[i].contains(tname)) {
-            return i;
-        }
-    }
-
-    return -1;
-}
 
 FromResolver::ResolveResult FromResolver::GPU::resolve(hsql::TableRef * ref, TableMap& tables) {
     std::vector<std::set<std::string>> table_names;

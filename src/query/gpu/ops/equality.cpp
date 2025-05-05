@@ -124,7 +124,7 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
             table_name = col->table;
         }
 
-        auto table_idx = FromResolver::GPU::find(input_data, table_name);
+        auto table_idx = FromResolver::find(input_data, table_name);
         if (table_idx == -1 ||
             std::find(
                 input_data->tables[table_idx]->headers.begin(),
@@ -245,7 +245,7 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
         table_name_r = right->table;
     }
 
-    auto table_idx = FromResolver::GPU::find(input_data, table_name_l);
+    auto table_idx = FromResolver::find(input_data, table_name_l);
     if (table_idx == -1 ||
             std::find(
                 input_data->tables[table_idx]->headers.begin(),
@@ -260,7 +260,7 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
     ptrdiff_t pos_l = std::find(table_ptr_l->headers.begin(), table_ptr_l->headers.end(), col_name_l) - table_ptr_l->headers.begin();
     auto column_ptr_l = table_ptr_l->columns[pos_l];
 
-    table_idx = FromResolver::GPU::find(input_data, table_name_r);
+    table_idx = FromResolver::find(input_data, table_name_r);
     if (table_idx == -1 ||
             std::find(
                 input_data->tables[table_idx]->headers.begin(),

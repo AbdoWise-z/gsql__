@@ -15,9 +15,6 @@
 namespace FromResolver::GPU {
     typedef ResolveResult ResolveResult; // because I don't wanna remove the GPU:: / or CPU:: prefix
 
-    ResolveResult merge(ResolveResult* a, ResolveResult* b);
-    int find(ResolveResult* a, std::string tname);
-
     ResolveResult resolve(hsql::TableRef*, TableMap& tables);
 };
 

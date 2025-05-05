@@ -11,50 +11,7 @@
 #include "store.hpp"
 #include "query/errors.hpp"
 
-FromResolver::ResolveResult FromResolver::CPU::merge(ResolveResult *a, ResolveResult *b) {
-    ResolveResult result;
-    for (int i = 0;i < a->table_names.size();i++) { // add a normally
-        auto names = a->table_names[i];
-        auto table = a->tables[i];
-        auto temporary = a->isTemporary[i];
-
-        result.table_names.push_back(names);
-        result.tables.push_back(table);
-        result.isTemporary.push_back(temporary);
-    }
-
-    for (int i = 0;i < b->table_names.size();i++) {
-        auto names = b->table_names[i];
-        auto table = b->tables[i];
-        auto temporary = b->isTemporary[i];
-
-        // we need to check for dubs
-        for (auto name: names) {
-            auto k = FromResolver::CPU::find(&result, name);
-            if (k != -1) {
-                throw std::runtime_error("Duplicate table name: " + name);
-            }
-        }
-
-        result.table_names.push_back(names);
-        result.tables.push_back(table);
-        result.isTemporary.push_back(temporary);
-    }
-
-    return result;
-}
-
-int FromResolver::CPU::find(ResolveResult *a, std::string tname) {
-    for (int i = 0;i < a->table_names.size();i++) {
-        if (a->table_names[i].contains(tname)) {
-            return i;
-        }
-    }
-
-    return -1;
-}
-
-FromResolver::ResolveResult FromResolver::CPU::resolve(hsql::TableRef * ref) {
+FromResolver::ResolveResult FromResolver::CPU::resolve(hsql::TableRef * ref, TableMap& tables) {
     std::vector<std::set<std::string>> table_names;
     std::vector<table*> table_values;
     std::vector<bool> temporary_table;
@@ -63,7 +20,7 @@ FromResolver::ResolveResult FromResolver::CPU::resolve(hsql::TableRef * ref) {
         std::string name = ref->name;
         std::string t_name = ref->name;
 
-        if (!global_tables.contains(name)) {
+        if (!tables.contains(name)) {
             throw NoSuchTableError(name);
         }
 
@@ -72,7 +29,7 @@ FromResolver::ResolveResult FromResolver::CPU::resolve(hsql::TableRef * ref) {
         }
 
         table_names.push_back({t_name});
-        table_values.push_back(global_tables[name]);
+        table_values.push_back(tables[name]);
         temporary_table.push_back(false);
 
     } else if (ref->type == hsql::kTableSelect) {
@@ -80,12 +37,12 @@ FromResolver::ResolveResult FromResolver::CPU::resolve(hsql::TableRef * ref) {
             throw std::runtime_error("Invalid table reference");
 
         table_names.push_back({ref->alias->name});
-        table_values.push_back(SelectExecutor::CPU::Execute(ref->select));
+        table_values.push_back(SelectExecutor::CPU::Execute(ref->select, tables).second);
         temporary_table.push_back(true);
 
     } else if (ref->type == hsql::kTableCrossProduct) {
         for (auto tableName: *(ref->list)) { // execute each sub-import alone and return the final result
-            auto result = FromResolver::CPU::resolve(tableName);
+            auto result = FromResolver::CPU::resolve(tableName, tables);
             for (int i = 0;i < result.table_names.size();i++) {
                 auto names = result.table_names[i];
                 auto table = result.tables[i];
@@ -101,34 +58,21 @@ FromResolver::ResolveResult FromResolver::CPU::resolve(hsql::TableRef * ref) {
             }
         }
     } else if (ref->type == hsql::kTableJoin) {
-        //fixme: Joins with tiling needs a rework.
         auto join = ref->join;
 
-        auto left = FromResolver::CPU::resolve(join->left);
-        auto right = FromResolver::CPU::resolve(join->right);
-        auto merged = FromResolver::CPU::merge(&left, &right);
+        auto select = new hsql::SelectStatement();
+        select->fromTable = new hsql::TableRef(hsql::kTableCrossProduct);
+        select->fromTable->list = new std::vector<hsql::TableRef*>();
+        select->fromTable->list->push_back(join->left);
+        select->fromTable->list->push_back(join->right);
+        select->selectList = new std::vector<hsql::Expr*>();
+        select->selectList->push_back(new hsql::Expr(hsql::kExprStar));
+        select->whereClause = join->condition;
 
-        auto tensor = FilterApplier::CPU::apply(&merged, join->condition, nullptr);
-        auto result = SelectExecutor::CPU::ConstructTable(tensor, &merged);
-        delete tensor;
+        auto result = SelectExecutor::CPU::Execute(select, tables);
 
-        std::set<std::string> final_result;
-        for (auto names: merged.table_names) {
-            for (auto name: names) {
-                final_result.insert(name);
-            }
-        }
-
-        for (int i = 0;i < merged.tables.size();i++) {
-            // clean up
-            if (merged.isTemporary[i]) {
-                delete merged.tables[i];
-            }
-        }
-
-
-        table_names.push_back(final_result);
-        table_values.push_back(result.result);
+        table_names.push_back(result.first);
+        table_values.push_back(result.second);
         temporary_table.push_back(true);
     } else {
         throw std::runtime_error("Unknown \"from\" type.");

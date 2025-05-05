@@ -14,12 +14,13 @@
 #include "agg/sum_avg_count.hpp"
 #include "db/table.hpp"
 #include "query/errors.hpp"
+#include "query/query_optimizer.hpp"
 #include "utils/konsol.hpp"
 #include "utils/string_utils.hpp"
 
 #define SELECT_DEBUG
 
-table* SelectExecutor::CPU::Execute(hsql::SQLStatement *statement) {
+std::pair<std::set<std::string>, table*> SelectExecutor::CPU::Execute(hsql::SQLStatement *statement, TableMap& tables) {
 
     const auto* stmnt = dynamic_cast<hsql::SelectStatement*>(statement);
     if (stmnt == nullptr) {
@@ -32,91 +33,154 @@ table* SelectExecutor::CPU::Execute(hsql::SQLStatement *statement) {
     }
 
     // resolve the input
-    auto query_input = FromResolver::CPU::resolve(from);
+    auto global_query_input = FromResolver::CPU::resolve(from, tables);
 
 #ifdef SELECT_DEBUG
     std::cout << "Query: " << std::endl;
-    for (int i = 0;i < query_input.table_names.size();i++) {
-        auto k = StringUtils::join(query_input.table_names[i].begin(), query_input.table_names[i].end());
-        k = StringUtils::limit(k, 24 * 2);
-        auto v = query_input.tables[i];
-        auto t = query_input.isTemporary[i];
-        std::cout << "T\t" << std::setw(24) << std::left << color(k, CYAN_FG) << "at " << std::hex << MAGENTA_FG << v << RESET_FG << "\t" << (t ? "(r)" : "") << std::endl;
+    for (int i = 0;i < global_query_input.table_names.size();i++) {
+        auto k = StringUtils::join(global_query_input.table_names[i].begin(), global_query_input.table_names[i].end());
+        k = StringUtils::limit(k, 42 * 2);
+        auto v = global_query_input.tables[i];
+        auto t = global_query_input.isTemporary[i];
+        std::cout << "T\t" << std::setw(42) << std::left << color(k, CYAN_FG) << "at " << std::hex << MAGENTA_FG << v << RESET_FG << "\t" << (t ? "(r)" : "") << std::endl;
     }
 #endif
 
-    auto where = stmnt->whereClause;
+    auto global_where = stmnt->whereClause;
     auto limit = stmnt->limit;
 
-    std::vector<size_t> inputSize;
-    for (auto k : query_input.tables) {
-        if (k->columns.size() > 0) {
-            inputSize.push_back(k->size());
-        } else {
-            inputSize.push_back(0);
-        }
-    }
+    auto sub_queries = QueryOptimizer::ReducePlan(QueryOptimizer::GeneratePlan(global_query_input, stmnt));
 
-    auto tileSize = Cfg::getTileSizeFor(inputSize);
-    // apply the Where filter
+#ifdef SELECT_DEBUG
+    std::cout << "Execution Plan:" << std::endl;
+    for (int i = 0; i < sub_queries.size(); ++i) {
+        auto step = sub_queries[i];
+        std::cout << "\t" << color( std::to_string(i), BLUE_FG) << " -> { ";
+        int j = 0;
+        for (const auto& name: step.output_names) {
+            std::cout << color(name, YELLOW_FG);
+            if (j++ != step.output_names.size() - 1) std::cout << ", ";
+        }
+
+        std::cout << " } where " << fcolor(QueryOptimizer::exprToString(step.query), MAGENTA_FG) << ";" << std::endl;
+    }
+#endif
+
     ConstructionResult result {
         .result = nullptr,
         .col_source = {}
     };
 
-    auto tiles = Schedule(inputSize);
+    std::set<std::string> result_tables{};
 
-#ifdef SELECT_DEBUG
-    std::cout << "Input size: [ ";
-    for (auto i : inputSize) {
-        std::cout << std::dec << i << " ";
-    }
-    std::cout << "]" << std::endl;
-    std::cout << "Tile size: [ ";
-    for (auto i : tileSize) {
-        std::cout << std::dec << i << " ";
-    }
-    std::cout << "]" << std::endl;
-    std::cout << "Total number of tiles: " << std::dec << tiles.size() << std::endl;
-#endif
+    for (const auto& step: sub_queries) {
+        ConstructionResult local_result {
+            .result = nullptr,
+            .col_source = {}
+        };
 
-    size_t debug_current_tile = 0;
-#ifdef SELECT_DEBUG
-    std::cout << "Progress: 0/" << std::dec << tiles.size();
-    std::cout.flush();
-#endif
-    for (auto tile: tiles) {
-        auto intermediate = FilterApplier::CPU::apply(
-            &query_input,
-            where,
-            limit,
-            tile,
-            tileSize
-            );
+        auto query_input = step.input;
+        auto where = step.query;
 
-        if (result.result == nullptr) {
-            result = ConstructTable(intermediate, &query_input);
-        } else {
-            AppendTable(intermediate, &query_input, tile, result.result);
+        bool injected = false;
+
+        for (int i = 0; i < query_input.tables.size(); ++i) {
+            if (QueryOptimizer::intersects(query_input.table_names[i], result_tables)) {
+                query_input.tables[i] = result.result;
+                query_input.table_names[i] = QueryOptimizer::Union(result_tables, query_input.table_names[i]);
+                injected = true;
+            }
         }
 
+        if (!injected && result.result != nullptr) {
+            query_input.tables.push_back(result.result);
+            query_input.table_names.push_back(result_tables);
+        }
+
+        if (where == nullptr && query_input.tables.size() == 1) {
+            // no where clause, just pass the table
+            local_result.result = query_input.tables[0];
+            local_result.col_source = {};
+            for (const auto& h: local_result.result->headers) {
+                local_result.col_source.push_back(query_input.table_names[0]);
+            }
+
+            auto prev_ptr = result.result;
+            if (shouldDelete(global_query_input, prev_ptr)) delete prev_ptr;
+
+            result = local_result;
+            result_tables.insert(query_input.table_names[0].begin(), query_input.table_names[0].end());
+            continue;
+        }
+
+        std::vector<size_t> inputSize;
+        for (auto k : query_input.tables) {
+            if (!k->columns.empty()) {
+                inputSize.push_back(k->size());
+            } else {
+                inputSize.push_back(0);
+            }
+        }
+
+        auto tileSize = Cfg::getTileSizeFor(inputSize);
+        auto tiles = Schedule(inputSize);
 
 #ifdef SELECT_DEBUG
-        std::cout << "\rProgress: " << std::dec << (++debug_current_tile) << "/" << std::dec << tiles.size();
+        std::cout << "Input size: [ ";
+        for (auto i : inputSize) {
+            std::cout << std::dec << i << " ";
+        }
+        std::cout << "]" << std::endl;
+        std::cout << "Tile size: [ ";
+        for (auto i : tileSize) {
+            std::cout << std::dec << i << " ";
+        }
+        std::cout << "]" << std::endl;
+        std::cout << "Total number of tiles: " << std::dec << tiles.size() << std::endl;
+#endif
+
+        size_t debug_current_tile = 0;
+#ifdef SELECT_DEBUG
+        std::cout << "Progress: 0/" << std::dec << tiles.size();
         std::cout.flush();
 #endif
-        delete intermediate;
-    }
+        for (const auto& tile: tiles) {
+            auto intermediate = FilterApplier::CPU::apply(
+                    &query_input,
+                    where,
+                    limit,
+                    tile,
+                    tileSize
+                );
+
+            if (local_result.result == nullptr) {
+                local_result = ConstructTable(intermediate, &query_input);
+            } else {
+                AppendTable(intermediate, &query_input, tile, local_result.result);
+            }
 
 #ifdef SELECT_DEBUG
-    std::cout << std::endl;
+            std::cout << "\rProgress: " << std::dec << (++debug_current_tile) << "/" << std::dec << tiles.size() << "\t";
+            std::cout.flush();
 #endif
 
+            delete intermediate;
+        }
+
+#ifdef SELECT_DEBUG
+        std::cout << std::endl;
+#endif
+
+        delete result.result;
+        result = local_result;
+        result_tables = step.output_names;
+    }
+
     // clean up any temp tables created in the process
-    for (int i = 0;i < query_input.tables.size();i++) {
+    for (int i = 0;i < global_query_input.tables.size();i++) {
         // clean up
-        if (query_input.isTemporary[i]) {
-            delete query_input.tables[i];
+        if (global_query_input.isTemporary[i]) {
+            delete global_query_input.tables[i];
         }
     }
 
@@ -222,16 +286,75 @@ table* SelectExecutor::CPU::Execute(hsql::SQLStatement *statement) {
                 final_result->columns.back()->type = col->type;
                 final_result->columns.back()->data.push_back(Agg::CPU::max(col));
             } else {
-                throw UnsupportedOperationError("Function not supported");
+                throw UnsupportedOperationError(func_name + "(col) not supported");
             }
         }
     }
 
-    delete result.result;
+    auto orderBy = stmnt->order;
+    if (orderBy && orderBy->size() > 1)
+        throw UnsupportedOperationError("Order by is not supported with more than one col");
 
-    // there is no memory leak .. the IDE is tripping.
-    // ReSharper disable once CppDFAMemoryLeak
-    return final_result;
+    if (orderBy && orderBy->size() == 1) {
+        auto order = (*orderBy)[0];
+        auto expr = order->expr;
+
+        std::string col_name = expr->name;
+        std::string table_name;
+
+        if (expr->table != nullptr) {
+            table_name = expr->table; // limit to specific table
+        }
+
+        auto idx = getColumn(&result, table_name, col_name);
+        if (idx == -1) {
+            throw NoSuchColumnError(table_name + "." + col_name);
+        } else if (idx == -2) {
+            throw NoSuchTableError(table_name);
+        }
+
+        auto col = final_result->columns[idx];
+        col->buildSortedIndexes();
+        auto sorted = col->sorted;
+
+        if (order->type == hsql::OrderType::kOrderDesc) {
+            for (index_t i = 0; i < sorted.size() / 2; i++) {
+                auto k = sorted[i];
+                sorted[i] = sorted[sorted.size() - i - 1];
+                sorted[sorted.size() - i - 1] = k;
+            }
+        }
+
+        auto final_final_pro_max = new table();
+        final_final_pro_max->headers = final_result->headers;
+
+        for (const auto& _f_col: final_result->columns) {
+            final_final_pro_max->columns.push_back(new column());
+            final_final_pro_max->columns.back()->data = std::vector<tval>(_f_col->data.size());
+            final_final_pro_max->columns.back()->type = _f_col->type;
+        }
+
+        index_t index = 0;
+
+        for (const index_t &i : sorted) {
+            for (int j = 0;j < final_final_pro_max->columns.size(); ++j) {
+                final_final_pro_max->columns[j]->data[index] = final_result->columns[j]->data[i];
+            }
+
+            index++;
+        }
+
+        for (const auto& _f_col: final_result->columns) {
+            _f_col->data.clear();
+        }
+
+        delete final_result;
+        final_result = final_final_pro_max;
+    }
+
+    if (shouldDelete(global_query_input, result.result)) delete result.result;
+
+    return {result_tables, final_result};
 }
 
 SelectExecutor::CPU::ConstructionResult SelectExecutor::CPU::ConstructTable(

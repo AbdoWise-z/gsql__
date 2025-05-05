@@ -304,7 +304,7 @@ void sql(std::vector<std::string> params) {
         if (Cfg::useAccelerator) {
             r_vec = time_it(GPUExecutor::executeQuery(parser_result, global_tables));
         } else {
-            r_vec = time_it(CPUExecutor::executeQuery(parser_result));
+            r_vec = time_it(CPUExecutor::executeQuery(parser_result, global_tables));
         }
         for (auto t: r_vec) {
             std::cout << "Result: " << std::endl;

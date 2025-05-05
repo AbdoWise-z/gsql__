@@ -14,7 +14,7 @@ void column::buildSortedIndexes() {
     }
 
     std::sort(sorted.begin(), sorted.end(), [this](const auto& a, const auto& b) {
-        return ValuesHelper::cmp(data[a], data[b], type) > 0;
+        return ValuesHelper::cmp(data[a], data[b], type) < 0; // Descending ordering
     });
 }
 
@@ -62,7 +62,7 @@ std::vector<size_t> column::sortSearch(tval v, SortedSearchType t) const {
     switch (t) {
         case SST_GT:
             it = std::lower_bound(sorted.begin(), sorted.end(), v, [&] (auto a, auto val) {
-                return ValuesHelper::cmp(val, data[a], type) > 0;
+                return ValuesHelper::cmp(val, data[a], type) >= 0;
             });
             while (it != sorted.end()) {
                 result.push_back(*it);
@@ -71,7 +71,7 @@ std::vector<size_t> column::sortSearch(tval v, SortedSearchType t) const {
             break;
         case SST_GTE:
             it = std::lower_bound(sorted.begin(), sorted.end(), v, [&] (auto a, auto val) {
-                return ValuesHelper::cmp(val, data[a], type) >= 0;
+                return ValuesHelper::cmp(val, data[a], type) > 0;
             });
             while (it != sorted.end()) {
                 result.push_back(*it);
@@ -81,22 +81,22 @@ std::vector<size_t> column::sortSearch(tval v, SortedSearchType t) const {
 
         case SST_LT:
             it = std::upper_bound(sorted.begin(), sorted.end(), v, [&] (auto val, auto a) {
-                return ValuesHelper::cmp(val, data[a], type) < 0;
+                return ValuesHelper::cmp(data[a], val, type) >= 0;
             });
 
             while (it2 != it) {
-                result.push_back(*it);
+                result.push_back(*it2);
                 ++it2;
             }
             break;
 
         case SST_LTE:
             it = std::upper_bound(sorted.begin(), sorted.end(), v, [&] (auto val, auto a) {
-                return ValuesHelper::cmp(val, data[a], type) <= 0;
+                return ValuesHelper::cmp(data[a], val, type) > 0;
             });
 
             while (it2 != it) {
-                result.push_back(*it);
+                result.push_back(*it2);
                 ++it2;
             }
             break;

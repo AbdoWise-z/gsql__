@@ -69,7 +69,7 @@ namespace InequalityKernel {
         int high = n;
         while (low < high) {
             int mid = low + (high - low) / 2;
-            if (cmp(data[index[mid]], target) < 0) {
+            if (cmp(target, data[index[mid]]) >= 0) {
                 low = mid + 1;
             } else {
                 high = mid;
@@ -84,15 +84,14 @@ namespace InequalityKernel {
         int high = n;
         while (low < high) {
             int mid = low + (high - low) / 2;
-            if (cmp(data[index[mid]], target) > 0) {
-                high = mid;
-            } else {
+            if (cmp(data[index[mid]], target) < 0) {
                 low = mid + 1;
+            } else {
+                high = mid;
             }
         }
 
-        if (cmp(data[low], target) > 0) return -1;
-        return low;
+        return low - 1;
     }
 
     /// ===========================
@@ -144,19 +143,19 @@ namespace InequalityKernel {
         pos[table_1_i] = col1_index - tileOffset[table_1_i];
 
         // search logic
-        if (operation == column::SST_GT) {
-            auto start = lower_bound(col_2, sorted_index, col_2_size, val);
-            while (start < col_2_size) {
-                pos[table_2_i] = sorted_index[start] - tileOffset[table_2_i];
-                result[TensorKernel::map(pos, tileShape, tablesCount)] = 1;
-                ++start;
-            }
-        } else { // must be less than
+        if (operation == column::SST_GT) { // col_1 > col_2
             auto start = upper_bound(col_2, sorted_index, col_2_size, val);
             while (start >= 0) {
                 pos[table_2_i] = sorted_index[start] - tileOffset[table_2_i];
                 result[TensorKernel::map(pos, tileShape, tablesCount)] = 1;
                 --start;
+            }
+        } else { // must be less than
+            auto start = lower_bound(col_2, sorted_index, col_2_size, val);
+            while (start < col_2_size) {
+                pos[table_2_i] = sorted_index[start] - tileOffset[table_2_i];
+                result[TensorKernel::map(pos, tileShape, tablesCount)] = 1;
+                ++start;
             }
         }
     }

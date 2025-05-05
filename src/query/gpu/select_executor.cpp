@@ -20,16 +20,6 @@
 
 #define SELECT_DEBUG
 
-static inline bool shouldDelete(FromResolver::ResolveResult r, table* t) {
-    for (int i = 0;i < r.tables.size();i++) {
-        if (r.tables[i] == t) {
-            return r.isTemporary[i];
-        }
-    }
-
-    return true; // not in the input so it was created by us
-}
-
 std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLStatement *statement, TableMap& tables) {
 
     const auto* stmnt = dynamic_cast<hsql::SelectStatement*>(statement);
@@ -116,7 +106,7 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
             }
 
             auto prev_ptr = result.result;
-            if (::shouldDelete(global_query_input, prev_ptr)) delete prev_ptr;
+            if (shouldDelete(global_query_input, prev_ptr)) delete prev_ptr;
 
             result = local_result;
             result_tables.insert(query_input.table_names[0].begin(), query_input.table_names[0].end());
@@ -384,7 +374,7 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
         final_result = final_final_pro_max;
     }
 
-    if (::shouldDelete(global_query_input, result.result)) delete result.result;
+    if (shouldDelete(global_query_input, result.result)) delete result.result;
 
     return {result_tables, final_result};
 }

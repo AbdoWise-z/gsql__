@@ -18,7 +18,7 @@ namespace SelectExecutor::CPU {
         std::vector<std::set<std::string>> col_source;
     };
 
-    table* Execute(hsql::SQLStatement* statement);
+    std::pair<std::set<std::string>, table*> Execute(hsql::SQLStatement* statement, TableMap& tables);
 
     ConstructionResult ConstructTable(
        tensor<char, Device::CPU>* intermediate,

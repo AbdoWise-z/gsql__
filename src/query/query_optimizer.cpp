@@ -229,7 +229,7 @@ namespace QueryOptimizer {
 
         FromResolver::ResolveResult result;
         for (const auto& i : req) {
-            auto idx = FromResolver::GPU::find(&r, i);
+            auto idx = FromResolver::find(&r, i);
             if (idx == -1) {
                 throw NoSuchTableError(i);
             }

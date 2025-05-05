@@ -13,14 +13,14 @@
 #include <hsql/SQLParserResult.h>
 #include <hsql/sql/SelectStatement.h>
 
+#include "resolve_result.hpp"
 #include "db/table.hpp"
-#include "query/gpu/from_resolver.hpp"
 
 
 namespace QueryOptimizer {
     struct ExecutionStep {
         hsql::Expr                       *query{} ;
-        FromResolver::GPU::ResolveResult     input;
+        FromResolver::ResolveResult     input;
         std::set<std::string>         output_names;
     };
 
@@ -41,7 +41,7 @@ namespace QueryOptimizer {
 
     std::set<std::string> getRequiredTables(FromResolver::ResolveResult& r, hsql::Expr* where);
 
-    FromResolver::GPU::ResolveResult constructSubInput(FromResolver::GPU::ResolveResult& r, hsql::Expr* where);
+    FromResolver::ResolveResult constructSubInput(FromResolver::ResolveResult& r, hsql::Expr* where);
 
     std::vector<ExecutionStep> GeneratePlan(FromResolver::ResolveResult inputs, const hsql::SelectStatement* query);
 

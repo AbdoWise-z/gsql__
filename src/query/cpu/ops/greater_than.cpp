@@ -113,7 +113,7 @@ tensor<char, Device::CPU> * Ops::CPU::greater_than(
             table_name = col->table;
         }
 
-        auto table_idx = FromResolver::CPU::find(input_data, table_name);
+        auto table_idx = FromResolver::find(input_data, table_name);
         if (table_idx == -1 ||
             std::find(
                 input_data->tables[table_idx]->headers.begin(),
@@ -166,7 +166,7 @@ tensor<char, Device::CPU> * Ops::CPU::greater_than(
             else
                 value = ValuesHelper::create_from(literal->fval);
 
-            auto bucket = column_ptr->sortSearch(value, literal_on_left ? column::SST_GT : column::SST_LT);
+            auto bucket = column_ptr->sortSearch(value, literal_on_left ? column::SST_LT : column::SST_GT);
             ValuesHelper::deleteValue(value, column_ptr->type);
 
             for (auto r: bucket) {
@@ -275,7 +275,7 @@ tensor<char, Device::CPU> * Ops::CPU::greater_than(
         table_name_r = right->table;
     }
 
-    auto table_idx = FromResolver::CPU::find(input_data, table_name_l);
+    auto table_idx = FromResolver::find(input_data, table_name_l);
     if (table_idx == -1 ||
             std::find(
                 input_data->tables[table_idx]->headers.begin(),
@@ -290,7 +290,7 @@ tensor<char, Device::CPU> * Ops::CPU::greater_than(
     ptrdiff_t pos_l = std::find(table_ptr_l->headers.begin(), table_ptr_l->headers.end(), col_name_l) - table_ptr_l->headers.begin();
     auto column_ptr_l = table_ptr_l->columns[pos_l];
 
-    table_idx = FromResolver::CPU::find(input_data, table_name_r);
+    table_idx = FromResolver::find(input_data, table_name_r);
     if (table_idx == -1 ||
             std::find(
                 input_data->tables[table_idx]->headers.begin(),
@@ -356,7 +356,7 @@ tensor<char, Device::CPU> * Ops::CPU::greater_than(
     }
 
     for (int i = result_offset[other_index];i < result_offset[other_index] + result_size[other_index];i++) {
-        auto matches = sorted->sortSearch(other->data[i], other_index == table_index_l ? column::SST_GT : column::SST_LT);
+        auto matches = sorted->sortSearch(other->data[i], other_index == table_index_l ? column::SST_LT : column::SST_GT);
         hyperplane_pos[other_index] = i - result_offset[other_index];
         for (auto match: matches) {
             if (match < result_offset[hashed_index] || match >= result_offset[hashed_index] + result_size[hashed_index]) {

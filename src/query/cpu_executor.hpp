@@ -8,11 +8,12 @@
 
 #include <hsql/SQLParserResult.h>
 
+#include "store.hpp"
 #include "db/table.hpp"
 
 
 namespace CPUExecutor {
-    std::vector<table*> executeQuery(const hsql::SQLParserResult&);
+    std::vector<table*> executeQuery(const hsql::SQLParserResult&, TableMap& tables);
 };
 
 
