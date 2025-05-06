@@ -21,7 +21,34 @@ namespace fs = std::filesystem;
 
 
 
-void loadTable(std::vector<std::string> params) {
+
+
+void removeTable(std::vector<std::string> params) {
+    for (auto name: params) {
+        if (global_tables.find(name) != global_tables.end()) {
+            delete global_tables[name];
+            global_tables.erase(name);
+            std::cout << "Removed: " << color(name, GREEN_FG) << std::endl;
+            return;
+        } else {
+            std::cout << "Table [" << color(name, RED_FG) << "] not found" << std::endl;
+        }
+    }
+}
+
+void show_details(std::vector<std::string> params) {
+    for (const auto& name: params) {
+        if (global_tables.contains(name)) {
+            auto table = global_tables[name];
+
+            std::cout << name << ": " << table::details(table) << std::endl;
+        } else {
+            std::cout << "Table [" << color(name, RED_FG) << "] not found" << std::endl;
+        }
+    }
+}
+
+void load_table(std::vector<std::string> params) {
     if (params.empty() || params.size() > 2) {
         std::cout << "Usage: load [path] [alias]" << std::endl;
         return;
@@ -48,36 +75,42 @@ void loadTable(std::vector<std::string> params) {
     }
 
     try {
-        table* t = fromCSV(p);
+        table* t = DBHelper::fromCSV(p);
         global_tables[name] = t;
         std::cout << "Loaded: " << color(p, GREEN_FG) << ", as: " << color(name, YELLOW_FG) << std::endl;
+        show_details({name});
     } catch (const std::exception& e) {
         std::cout << "Error loading: " << e.what() << std::endl;
     }
 }
 
-void removeTable(std::vector<std::string> params) {
-    for (auto name: params) {
-        if (global_tables.find(name) != global_tables.end()) {
-            delete global_tables[name];
-            global_tables.erase(name);
-            std::cout << "Removed: " << color(name, GREEN_FG) << std::endl;
-            return;
-        } else {
-            std::cout << "Table [" << color(name, RED_FG) << "] not found" << std::endl;
-        }
+void save_table(std::vector<std::string> params) {
+    if (params.size() != 2) {
+        std::cout << "Usage: save [name] [path]" << std::endl;
+        return;
     }
-}
 
-void show_details(std::vector<std::string> params) {
-    for (const auto& name: params) {
-        if (global_tables.contains(name)) {
-            auto table = global_tables[name];
+    const std::string name = params[0];
+    const std::string& path_str = params[1];
 
-            std::cout << name << ": " << table::details(table) << std::endl;
-        } else {
-            std::cout << "Table [" << color(name, RED_FG) << "] not found" << std::endl;
-        }
+    fs::path p(path_str);
+
+    if (fs::exists(p)) {
+        std::cout << "File already exists" << std::endl;
+        return;
+    }
+
+    if (global_tables.find(name) == global_tables.end()) {
+        std::cout << "no such table" << std::endl;
+        return;
+    }
+
+    try {
+        auto t = global_tables[name];
+        DBHelper::toCSV(t, p);
+        std::cout << "Saved: " << color(name, YELLOW_FG) << ", To: " << color(p, GREEN_FG) << std::endl;
+    } catch (const std::exception& e) {
+        std::cout << "Error saving: " << e.what() << std::endl;
     }
 }
 
@@ -317,6 +350,8 @@ void sql(std::vector<std::string> params) {
 
             global_tables["result_" + std::to_string(i)] = t;
             std::cout << "Result saved on table: " << color("result_" + std::to_string(i), GREEN_FG) << std::endl;
+            std::cout << "First 10 rows:" << std::endl;
+            show_table({"result_" + std::to_string(i), "0", "10"});
         }
     } catch (const std::exception& e) {
         std::cout << "Query failed: " << color(e.what(), RED_FG) << std::endl;
@@ -350,8 +385,9 @@ int main() {
     std::cout << "or enter a SQL query" << std::endl;
 
     CLI cli(sql);
-    cli.addCommand("load", loadTable);
-    cli.addCommand("add",    loadTable);
+    cli.addCommand("load", load_table);
+    cli.addCommand("add", load_table);
+    cli.addCommand("save", save_table);
     cli.addCommand("remove", removeTable);
     cli.addCommand("details", show_details);
     cli.addCommand("editor", editor);

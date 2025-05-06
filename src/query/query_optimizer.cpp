@@ -235,6 +235,7 @@ namespace QueryOptimizer {
             }
             result.table_names.push_back({i});
             result.tables.push_back(r.tables[idx]);
+            result.isTemporary.push_back(false);
         }
 
         return result;
@@ -245,15 +246,6 @@ namespace QueryOptimizer {
         auto sub_wheres = GeneratePlan(query->whereClause);
         std::vector<ExecutionStep> steps;
 
-        if (!query->whereClause) {
-            auto step = ExecutionStep();
-            step.query = nullptr;
-            step.input = inputs;
-            step.output_names = getRequiredTables(inputs, nullptr);
-            steps.push_back(step);
-        }
-
-
         for (auto where: sub_wheres) {
             auto sub_input = constructSubInput(inputs, where);
             auto step = ExecutionStep();
@@ -263,7 +255,42 @@ namespace QueryOptimizer {
             steps.push_back(step);
         }
 
-        return steps;
+        std::vector<ExecutionStep> final_steps;
+        for (auto& step: steps) {
+            if (!step.input.tables.empty()) { // only consider steps that has inputs
+                final_steps.push_back(step);  // empty steps can happen for any reason, for example: "select * from a where 1"
+            }                                 // the where doesn't rely on any input
+        }
+
+        std::vector<std::set<std::string>> UnusedTables = inputs.table_names;
+
+        for (auto& step: final_steps) {
+            for (auto& tables: step.input.table_names) {
+                for (auto& t_name: tables) {
+                    auto idx = FromResolver::find(UnusedTables, t_name);
+                    if (idx != -1) {
+                        UnusedTables.erase(UnusedTables.begin() + idx);
+                    }
+                }
+            }
+        }
+
+        // now for each used table .. just use it directly in an JOIN query
+        for (auto& in: UnusedTables) {
+            auto step = ExecutionStep();
+            auto sub_input = FromResolver::ResolveResult();
+            sub_input.table_names.push_back(in);
+            sub_input.isTemporary.push_back(false);
+            sub_input.tables.push_back(inputs.tables[find(&inputs, *in.begin())]);
+
+            step.query = nullptr;
+            step.input = sub_input;
+            step.output_names = in;
+            final_steps.push_back(step);
+        }
+
+
+        return final_steps;
     }
 
     std::vector<ExecutionStep> ReducePlan(std::vector<ExecutionStep> before_steps) {

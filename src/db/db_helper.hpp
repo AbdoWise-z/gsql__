@@ -9,7 +9,9 @@
 #include "table.hpp"
 
 
-table* fromCSV(std::string path);
-
+namespace DBHelper {
+    table* fromCSV(std::string path);
+    bool toCSV(table* t, const std::string& path);
+}
 
 #endif //DB_HELPER_HPP

@@ -73,7 +73,7 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
 
     std::set<std::string> result_tables{};
 
-    for (const auto& step: sub_queries) {
+    for (auto& step: sub_queries) {
         ConstructionResult local_result {
             .result = nullptr,
             .col_source = {}
@@ -88,6 +88,7 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
             if (QueryOptimizer::intersects(query_input.table_names[i], result_tables)) {
                 query_input.tables[i] = result.result;
                 query_input.table_names[i] = QueryOptimizer::Union(result_tables, query_input.table_names[i]);
+                step.output_names.insert(result_tables.begin(), result_tables.end());
                 injected = true;
             }
         }
@@ -95,6 +96,7 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
         if (!injected && result.result != nullptr) {
             query_input.tables.push_back(result.result);
             query_input.table_names.push_back(result_tables);
+            step.output_names.insert(result_tables.begin(), result_tables.end());
         }
 
         if (where == nullptr && query_input.tables.size() == 1) {
@@ -171,7 +173,8 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
         std::cout << std::endl;
 #endif
 
-        delete result.result;
+        auto prev_ptr = result.result;
+        if (shouldDelete(global_query_input, prev_ptr)) delete prev_ptr;
         result = local_result;
         result_tables = step.output_names;
     }

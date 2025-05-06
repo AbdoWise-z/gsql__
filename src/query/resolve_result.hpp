@@ -35,6 +35,16 @@ namespace FromResolver {
         return -1;
     }
 
+    inline int find(std::vector<std::set<std::string>> a, std::string tname) {
+        for (int i = 0;i < a.size();i++) {
+            if (a[i].contains(tname)) {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
     inline ResolveResult merge(ResolveResult *a, ResolveResult *b) {
         ResolveResult result;
         for (int i = 0;i < a->table_names.size();i++) { // add a normally
