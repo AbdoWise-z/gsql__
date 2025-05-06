@@ -8,6 +8,19 @@
 #include <regex>
 #include <optional>
 
+namespace ValuesHelper {
+    dateTime DefaultDateTimeValue = {
+        .year = 1970,
+        .month = 1,
+        .day = 1,
+        .hour = 0,
+        .minute = 0,
+        .second = 0
+    };
+    int64_t  DefaultIntegerValue = 0;
+    double   DefaultFloatValue   = 0;
+}
+
 int ValuesHelper::cmp(const int64_t& a, const int64_t& b) {
     return a > b ? 1 : (a < b ? -1 : 0);
 }

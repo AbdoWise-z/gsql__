@@ -96,6 +96,162 @@ table * DBHelper::fromCSV(std::string path) {
     return table;
 }
 
+
+inline std::vector<std::string> parseCSVLine(const std::string& line) {
+    std::vector<std::string> result;
+    std::string field;
+    bool inQuotes = false;
+
+    for (size_t i = 0; i < line.length(); ++i) {
+        char c = line[i];
+
+        if (inQuotes) {
+            if (c == '"') {
+                if (i + 1 < line.length() && line[i + 1] == '"') {
+                    field += '"';  // Escaped quote
+                    ++i;
+                } else {
+                    inQuotes = false;  // End of quoted field
+                }
+            } else {
+                field += c;
+            }
+        } else {
+            if (c == '"') {
+                inQuotes = true;
+            } else if (c == ',') {
+                result.push_back(field);
+                field.clear();
+            } else {
+                field += c;
+            }
+        }
+    }
+    result.push_back(field);  // Add last field
+    return result;
+}
+
+
+static std::vector<DataType> inferTypes(std::string row) {
+    std::vector<DataType> types;
+    std::optional<dateTime> dt;
+
+
+    auto fields = parseCSVLine(row);
+
+    for (const auto& field: fields) {
+        try {
+            if (field.find(".") == field.npos) {
+                auto int_val = std::stoll(field);
+                types.push_back(INTEGER);
+                continue;
+            }
+        } catch (...) {}
+
+        try {
+            auto double_val = std::stod(field);
+            types.push_back(FLOAT);
+            continue;
+        } catch (...) {}
+
+        try {
+            auto dt_val = ValuesHelper::parseDateTime(field);
+            if (dt_val != std::nullopt) {
+                types.push_back(DateTime);
+                continue;
+            }
+        } catch (...) {}
+
+        types.push_back(STRING);
+    }
+
+    return types;
+}
+
+
+table * DBHelper::fromCSV_Unchecked(std::string path) {
+    auto table   = new ::table();
+    std::vector<std::string> lines;
+    std::ifstream file(path);
+
+    if (!file.is_open()) {
+        throw std::runtime_error("Unable to open file: " + path);
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        lines.push_back(line);
+    }
+
+    if (lines.empty()) {
+        return table;
+    }
+
+    table->headers = parseCSVLine(lines[0]);
+    std::vector<DataType> types;
+    for (int i = 0;i < table->headers.size();i++) {
+        types.push_back(STRING);
+
+    }
+
+    if (lines.size() > 1) {
+        types = inferTypes(lines[1]);
+    }
+
+    for (auto type: types) {
+        table->columns.push_back(new column());
+        // pre - reserve anything that we need
+        table->columns[table->columns.size() - 1]->type = type;
+        table->columns[table->columns.size() - 1]->data = std::vector<tval>(lines.size() - 1, {nullptr});
+    }
+
+    #pragma omp parallel for default(none) shared(lines, types, table, path, ValuesHelper::DefaultIntegerValue, ValuesHelper::DefaultFloatValue, ValuesHelper::DefaultDateTimeValue) schedule(static)
+    for (size_t i = 1; i < lines.size(); i++) {
+        auto vals = parseCSVLine(lines[i]);
+
+        if (types.size() != vals.size()) {
+            #pragma omp critical
+            {
+                throw std::runtime_error("Wrong number of columns in file: " + path + ", line " + std::to_string(i));
+            }
+        }
+
+        for (size_t j = 0; j < types.size(); j++) {
+            tval value{};
+            switch (types[j]) {
+                case INTEGER:
+                    try {
+                        value = ValuesHelper::create_from(static_cast<int64_t>(std::stoll(vals[j])));
+                    } catch (...) {
+                        value = ValuesHelper::create_from(ValuesHelper::DefaultIntegerValue);
+                    }
+                    break;
+                case FLOAT:
+                    try {
+                        value = ValuesHelper::create_from(std::stod(vals[j]));
+                    } catch (...) {
+                        value = ValuesHelper::create_from(ValuesHelper::DefaultFloatValue);
+                    }
+                    break;
+                case DateTime:
+                    try {
+                        value = ValuesHelper::create_from(ValuesHelper::parseDateTime(vals[j]).value());
+                    } catch (...) {
+                        value = ValuesHelper::create_from(ValuesHelper::DefaultDateTimeValue);
+                    }
+                    break;
+                case STRING:
+                    value = ValuesHelper::create_from(vals[j]);
+                    break;
+            }
+
+            table->columns[j]->data[i - 1] = value;
+        }
+    }
+
+    return table;
+}
+
 static std::string asString(const tval &value, DataType type)
 {
     std::string result;

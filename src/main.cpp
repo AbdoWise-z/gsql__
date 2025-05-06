@@ -75,7 +75,7 @@ void load_table(std::vector<std::string> params) {
     }
 
     try {
-        table* t = DBHelper::fromCSV(p);
+        table* t = time_it(DBHelper::fromCSV_Unchecked(p));
         global_tables[name] = t;
         std::cout << "Loaded: " << color(p, GREEN_FG) << ", as: " << color(name, YELLOW_FG) << std::endl;
         show_details({name});

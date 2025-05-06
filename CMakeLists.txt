@@ -132,6 +132,16 @@ set(SOURCES
 
         src/query/query_optimizer.cpp
         src/query/query_optimizer.hpp
+
+        src/query/resolve_result.hpp
+        src/query/query_optimizer.cpp
+        src/query/query_optimizer.hpp
+        src/query/gpu/kernels/reduce_kernels.cu
+        src/query/gpu/kernels/reduce_kernels.cuh
+        src/query/gpu/kernels/helper_kernels.cu
+        src/query/gpu/kernels/helper_kernels.cuh
+        src/query/gpu/kernels/order_by.cu
+        src/query/gpu/kernels/order_by.cuh
 )
 
 #
@@ -142,15 +152,7 @@ set(SOURCES
 add_executable(gsql__
         src/main.cpp
         ${SOURCES}
-        src/query/resolve_result.hpp
-        src/query/query_optimizer.cpp
-        src/query/query_optimizer.hpp
-        src/query/gpu/kernels/reduce_kernels.cu
-        src/query/gpu/kernels/reduce_kernels.cuh
-        src/query/gpu/kernels/helper_kernels.cu
-        src/query/gpu/kernels/helper_kernels.cuh
-        src/query/gpu/kernels/order_by.cu
-        src/query/gpu/kernels/order_by.cuh
+
 )
 
 set_target_properties(gsql__ PROPERTIES

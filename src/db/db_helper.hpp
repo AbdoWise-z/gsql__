@@ -11,6 +11,9 @@
 
 namespace DBHelper {
     table* fromCSV(std::string path);
+
+    table* fromCSV_Unchecked(std::string path);
+
     bool toCSV(table* t, const std::string& path);
 }
 

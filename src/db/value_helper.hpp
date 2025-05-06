@@ -45,31 +45,35 @@ namespace ValuesHelper {
 
     tval copy(tval v, const DataType& t);
 
+    extern dateTime DefaultDateTimeValue;
+    extern int64_t  DefaultIntegerValue;
+    extern double   DefaultFloatValue;
+
     inline uint64_t hash(const tval& v, const DataType& t) {
         return MurmurHash3_x64_64((t == STRING || t == DateTime) ? static_cast<const void*>(v.s) : static_cast<const void*>(&v), sizeOf(v, t), SEED);
     }
 
     inline tval create_from(const std::string& str) {
-        tval res;
+        tval res{};
         res.s = new std::string(str);
         return res;
     }
 
     inline tval create_from(int64_t i) {
-        tval res;
+        tval res{};
         res.i = i;
         return res;
     }
 
 
     inline tval create_from(double d) {
-        tval res;
+        tval res{};
         res.d = d;
         return res;
     }
 
     inline tval create_from(const dateTime dt) {
-        tval res;
+        tval res{};
         res.t = new dateTime(dt);
         return res;
     }
