@@ -98,6 +98,7 @@ table * DBHelper::fromCSV(std::string path) {
 
 
 inline std::vector<std::string> parseCSVLine(const std::string& line) {
+
     std::vector<std::string> result;
     std::string field;
     bool inQuotes = false;
@@ -180,6 +181,12 @@ table * DBHelper::fromCSV_Unchecked(std::string path) {
 
     std::string line;
     while (std::getline(file, line)) {
+        // Remove trailing '\r' if present (handles Windows \r\n) (fk windows btw)
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+
+        if (line.empty()) continue;
         lines.push_back(line);
     }
 
@@ -187,7 +194,15 @@ table * DBHelper::fromCSV_Unchecked(std::string path) {
         return table;
     }
 
-    table->headers = parseCSVLine(lines[0]);
+    auto headers = parseCSVLine(lines[0]);
+    auto headers_fixed = std::vector<std::string>(headers.size());
+    for (int i = 0;i < headers.size();i++) {
+        headers_fixed[i] = headers[i];
+        if (headers_fixed[i].ends_with("(P)")) {
+            headers_fixed[i] = headers[i].substr(0, headers[i].find_last_of(" (P)"));
+        }
+    }
+
     std::vector<DataType> types;
     for (int i = 0;i < table->headers.size();i++) {
         types.push_back(STRING);
@@ -198,14 +213,15 @@ table * DBHelper::fromCSV_Unchecked(std::string path) {
         types = inferTypes(lines[1]);
     }
 
-    for (auto type: types) {
-        table->columns.push_back(new column());
-        // pre - reserve anything that we need
-        table->columns[table->columns.size() - 1]->type = type;
-        table->columns[table->columns.size() - 1]->data = std::vector<tval>(lines.size() - 1, {nullptr});
+    table->setHeaders(headers, types);
+
+    for (int i = 0;i < types.size();i++) {
+        // pre-reserve anything that we need
+        table->columns[i]->data = std::vector<tval>(lines.size() - 1, {nullptr});
     }
 
-    #pragma omp parallel for default(none) shared(lines, types, table, path, ValuesHelper::DefaultIntegerValue, ValuesHelper::DefaultFloatValue, ValuesHelper::DefaultDateTimeValue) schedule(static)
+    // shared(lines, types, table, path, ValuesHelper::DefaultIntegerValue, ValuesHelper::DefaultFloatValue, ValuesHelper::DefaultDateTimeValue)
+    #pragma omp parallel for schedule(static)
     for (size_t i = 1; i < lines.size(); i++) {
         auto vals = parseCSVLine(lines[i]);
 
