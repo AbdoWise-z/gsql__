@@ -60,7 +60,7 @@ table::~table() {
 }
 
 size_t table::size() const {
-    if (columns.size() == 0) {
+    if (columns.empty()) {
         return 0;
     }
 
@@ -73,7 +73,10 @@ std::string table::details(table * table) {
     ss << color(std::to_string(table->headers.size()), RED_FG) << " columns";
     if (!table->columns.empty()) {
         ss << ", " << color(std::to_string(table->columns[0]->data.size()), RED_FG) << " rows";
+    } else {
+        ss << ", " << color("0", RED_FG) << " rows";
     }
+
     ss << std::endl;
 
     for (int i = 0; i < table->headers.size(); i++) {

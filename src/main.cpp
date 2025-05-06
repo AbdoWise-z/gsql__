@@ -140,6 +140,8 @@ void show_table(std::vector<std::string> params) {
         count = stoi(params[2]);
     }
 
+    if (table->headers.empty()) count = 0;
+
     for (int i = 0;i < table->headers.size();i++) {
         switch (table->columns[i]->type) {
             case STRING:

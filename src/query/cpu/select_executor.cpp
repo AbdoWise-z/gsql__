@@ -116,62 +116,80 @@ std::pair<std::set<std::string>, table*> SelectExecutor::CPU::Execute(hsql::SQLS
         }
 
         std::vector<size_t> inputSize;
+        bool empty_input = false;
         for (auto k : query_input.tables) {
-            if (!k->columns.empty()) {
-                inputSize.push_back(k->size());
-            } else {
-                inputSize.push_back(0);
-            }
+            empty_input = empty_input || (k->size() == 0);
+            inputSize.push_back(k->size());
         }
 
-        auto tileSize = Cfg::getTileSizeFor(inputSize);
-        auto tiles = Schedule(inputSize);
+        if (!empty_input) {
+            auto tileSize = Cfg::getTileSizeFor(inputSize);
+            auto tiles = Schedule(inputSize);
 
 #ifdef SELECT_DEBUG
-        std::cout << "Input size: [ ";
-        for (auto i : inputSize) {
-            std::cout << std::dec << i << " ";
-        }
-        std::cout << "]" << std::endl;
-        std::cout << "Tile size: [ ";
-        for (auto i : tileSize) {
-            std::cout << std::dec << i << " ";
-        }
-        std::cout << "]" << std::endl;
-        std::cout << "Total number of tiles: " << std::dec << tiles.size() << std::endl;
+            std::cout << "Input size: [ ";
+            for (auto i : inputSize) {
+                std::cout << std::dec << i << " ";
+            }
+            std::cout << "]" << std::endl;
+            std::cout << "Tile size: [ ";
+            for (auto i : tileSize) {
+                std::cout << std::dec << i << " ";
+            }
+            std::cout << "]" << std::endl;
+            std::cout << "Total number of tiles: " << std::dec << tiles.size() << std::endl;
 #endif
 
-        size_t debug_current_tile = 0;
+            size_t debug_current_tile = 0;
 #ifdef SELECT_DEBUG
-        std::cout << "Progress: 0/" << std::dec << tiles.size();
-        std::cout.flush();
-#endif
-        for (const auto& tile: tiles) {
-            auto intermediate = FilterApplier::CPU::apply(
-                    &query_input,
-                    where,
-                    limit,
-                    tile,
-                    tileSize
-                );
-
-            if (local_result.result == nullptr) {
-                local_result = ConstructTable(intermediate, &query_input);
-            } else {
-                AppendTable(intermediate, &query_input, tile, local_result.result);
-            }
-
-#ifdef SELECT_DEBUG
-            std::cout << "\rProgress: " << std::dec << (++debug_current_tile) << "/" << std::dec << tiles.size() << "\t";
+            std::cout << "Progress: 0/" << std::dec << tiles.size();
             std::cout.flush();
 #endif
+            for (const auto& tile: tiles) {
+                auto intermediate = FilterApplier::CPU::apply(
+                        &query_input,
+                        where,
+                        limit,
+                        tile,
+                        tileSize
+                    );
 
-            delete intermediate;
-        }
+                if (local_result.result == nullptr) {
+                    local_result = ConstructTable(intermediate, &query_input);
+                } else {
+                    AppendTable(intermediate, &query_input, tile, local_result.result);
+                }
 
 #ifdef SELECT_DEBUG
-        std::cout << std::endl;
+                std::cout << "\rProgress: " << std::dec << (++debug_current_tile) << "/" << std::dec << tiles.size() << "\t";
+                std::cout.flush();
 #endif
+
+                delete intermediate;
+            }
+
+#ifdef SELECT_DEBUG
+            std::cout << std::endl;
+#endif
+        } else {
+            // the input itself is empty ... so what we do is just create a new table
+            auto empty_result = new table();
+            std::vector<std::set<std::string>> col_source;
+
+            for (int t_idx = 0;t_idx < query_input.table_names.size();t_idx++) {
+                const auto t = query_input.tables[t_idx];
+                for (int i = 0;i < t->headers.size();i++) {
+                    empty_result->headers.push_back(t->headers[i]);
+                    auto col = new column();
+                    col->type = t->columns[i]->type;
+                    empty_result->columns.push_back(col);
+                    col_source.push_back(query_input.table_names[t_idx]);
+                }
+            }
+
+            local_result.result = empty_result;
+            local_result.col_source = col_source;
+        }
 
         auto prev_ptr = result.result;
         if (shouldDelete(global_query_input, prev_ptr)) delete prev_ptr;
