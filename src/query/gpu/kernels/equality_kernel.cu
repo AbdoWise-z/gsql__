@@ -233,3 +233,58 @@
 //         result[TensorKernel::map(pos, tileShape, tablesCount)] = 1;
 //     }
 // }
+
+__global__ void EqualityKernel::equality_kernel_date(char *result, size_t dataSize, size_t tablesCount, const dateTime *col_1,
+    const dateTime literal, size_t col_1_size, size_t *mask, size_t table_1_i, size_t *tileShape, size_t *tileOffset) {
+
+    size_t iTh = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (iTh >= tileShape[table_1_i]) return;
+
+    auto col1_index = iTh + tileOffset[table_1_i];
+    if (col1_index >= col_1_size) return;
+
+
+    auto val1 = col_1[col1_index];
+
+    size_t pos[MAX_TENSOR_DIMS];
+
+    for (int i = 0;i < tablesCount; i++) {
+        pos[i] = 0; // store the data in the zero-th plain
+    }
+
+    pos[table_1_i] = col1_index - tileOffset[table_1_i];
+
+
+    if (val1.day == literal.day && val1.year == literal.year && val1.month == literal.month) {
+        result[TensorKernel::map(pos, tileShape, tablesCount)] = 1;
+    }
+}
+
+
+__global__ void EqualityKernel::equality_kernel_time(char *result, size_t dataSize, size_t tablesCount, const dateTime *col_1,
+    const dateTime literal, size_t col_1_size, size_t *mask, size_t table_1_i, size_t *tileShape, size_t *tileOffset) {
+
+    size_t iTh = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (iTh >= tileShape[table_1_i]) return;
+
+    auto col1_index = iTh + tileOffset[table_1_i];
+    if (col1_index >= col_1_size) return;
+
+
+    auto val1 = col_1[col1_index];
+
+    size_t pos[MAX_TENSOR_DIMS];
+
+    for (int i = 0;i < tablesCount; i++) {
+        pos[i] = 0; // store the data in the zero-th plain
+    }
+
+    pos[table_1_i] = col1_index - tileOffset[table_1_i];
+
+
+    if (val1.hour == literal.hour && val1.minute == literal.minute && val1.second == literal.second) {
+        result[TensorKernel::map(pos, tileShape, tablesCount)] = 1;
+    }
+}

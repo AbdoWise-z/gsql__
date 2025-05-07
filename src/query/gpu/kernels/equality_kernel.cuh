@@ -179,6 +179,54 @@ namespace EqualityKernel {
             result[TensorKernel::map(pos, tileShape, tablesCount)] = 1;
         }
     }
+
+
+    /// ===========================
+    /// Normal Kernels (1D - Col , literal, only compare date)
+    /// ===========================
+    __global__ void equality_kernel_date(
+        // result params
+        char* result,
+        size_t dataSize,
+        size_t tablesCount,
+
+        // data params
+        const dateTime* col_1,
+        const dateTime  literal,
+        size_t  col_1_size,
+
+        // masking params
+        size_t *mask,
+        size_t table_1_i,
+
+        // tiling params
+        size_t* tileShape,
+        size_t* tileOffset
+    );
+
+
+    /// ===========================
+    /// Normal Kernels (1D - Col , literal, only compare time)
+    /// ===========================
+    __global__ void equality_kernel_time(
+        // result params
+        char* result,
+        size_t dataSize,
+        size_t tablesCount,
+
+        // data params
+        const dateTime* col_1,
+        const dateTime  literal,
+        size_t  col_1_size,
+
+        // masking params
+        size_t *mask,
+        size_t table_1_i,
+
+        // tiling params
+        size_t* tileShape,
+        size_t* tileOffset
+    );
 };
 
 

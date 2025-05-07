@@ -45,10 +45,24 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
         std::cout << "kExprOperator::Equals two literals" << std::endl;
 #endif
         // both are literal, just check if they are equal
+        bool ok = true;
+
         auto left_ = ValuesHelper::getLiteralFrom(left);
         auto right_ = ValuesHelper::getLiteralFrom(right);
 
-        result->setAll(ValuesHelper::cmp(left_.first, right_.first, left_.second, right_.second) == 0 ? 1 : 0);
+        try {
+            result->setAll(ValuesHelper::cmp(left_.first, right_.first, left_.second, right_.second) == 0 ? 1 : 0);
+        } catch (...) {
+            ok = false;
+        }
+
+        ValuesHelper::deleteValue(left_.first, left_.second);
+        ValuesHelper::deleteValue(right_.first, right_.second);
+
+        if (!ok) {
+            throw std::invalid_argument("Type mismatch between two literals");
+        }
+
         return result;
     }
 
@@ -96,12 +110,31 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
         ptrdiff_t pos = std::find(table_ptr->headers.begin(), table_ptr->headers.end(), col_name) - table_ptr->headers.begin();
         auto column_ptr = table_ptr->columns[pos];
 
-        auto literal_ = ValuesHelper::getLiteralFrom(literal);
+
         tval value{};
+
+        auto literal_ = ValuesHelper::getLiteralFrom(literal);
+        int dt_search_type = 0; // normal equality
         try {
             value = ValuesHelper::castTo(literal_.first, literal_.second, column_ptr->type);
         } catch (...) {
-            throw std::invalid_argument("Type mismatch between column and literal");
+            if (literal_.second == STRING && column_ptr->type == DateTime) {
+                auto _test = ValuesHelper::parseDateTimeDateOnly(*literal_.first.s);
+                if (_test != std::nullopt) {
+                    value = ValuesHelper::create_from(*_test);
+                    dt_search_type = 1; // search only on date
+                } else {
+                    _test = ValuesHelper::parseDateTimeTimeOnly(*literal_.first.s);
+                    if (_test != std::nullopt) {
+                        value = ValuesHelper::create_from(*_test);
+                        dt_search_type = 2; // search only on time
+                    } else {
+                        throw std::invalid_argument("Type mismatch between column and literal");
+                    }
+                }
+            } else {
+                throw std::invalid_argument("Type mismatch between column and literal");
+            }
         }
 
         std::vector<uint64_t> mask;
@@ -117,7 +150,7 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
             }
         }
 
-        if (column_ptr->isHashIndexed()) {
+        if (column_ptr->isHashIndexed() && dt_search_type == 0) {
             // if the column is hash indexed, we can use that to speed up the search
             // we need to create a mask for the other columns
             // and a hyperplane position for the current column
@@ -141,15 +174,37 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
             }
 
         } else {
-            GFI::equality(
-                result,
-                column_ptr,
-                value,
-                tile_start,
-                tile_size,
-                table_index,
-                mask
-            );
+            if (dt_search_type == 0) { // identical
+                GFI::equality(
+                    result,
+                    column_ptr,
+                    value,
+                    tile_start,
+                    tile_size,
+                    table_index,
+                    mask
+                );
+            } else if (dt_search_type == 1) { // date only
+                GFI::equality_date(
+                    result,
+                    column_ptr,
+                    value,
+                    tile_start,
+                    tile_size,
+                    table_index,
+                    mask
+                );
+            } else if (dt_search_type == 2) { // time only
+                GFI::equality_time(
+                    result,
+                    column_ptr,
+                    value,
+                    tile_start,
+                    tile_size,
+                    table_index,
+                    mask
+                );
+            }
         }
 
         ValuesHelper::deleteValue(value, column_ptr->type);

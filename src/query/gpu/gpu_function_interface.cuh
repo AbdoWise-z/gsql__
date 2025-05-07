@@ -32,6 +32,33 @@ namespace GFI {
         std::vector<size_t> mask
     );
 
+    void equality_date(
+        tensor<char, Device::GPU> *result,
+        column *col_1,
+        tval value,
+
+        std::vector<size_t> tileOffset,
+        std::vector<size_t> tileSize,
+
+        size_t table_1_index,
+
+        std::vector<size_t> mask
+    );
+
+    void equality_time(
+        tensor<char, Device::GPU> *result,
+        column *col_1,
+        tval value,
+
+        std::vector<size_t> tileOffset,
+        std::vector<size_t> tileSize,
+
+        size_t table_1_index,
+
+        std::vector<size_t> mask
+    );
+
+
     void equality(
         tensor<char, Device::GPU> *result,
         column *col_1,

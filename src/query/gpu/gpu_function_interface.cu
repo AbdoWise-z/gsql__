@@ -515,6 +515,102 @@ void GFI::equality(tensor<char, Device::GPU> *result, column *col_1, tval value,
     cu::free(_sVal);
 }
 
+
+void GFI::equality_date(tensor<char, Device::GPU> *result, column *col_1, tval value, std::vector<size_t> tileOffset,
+    std::vector<size_t> tileSize, size_t table_1_index, std::vector<size_t> mask) {
+
+    if (col_1->type != DateTime) {
+        throw UnsupportedOperationError("Expected col to have a type of dateTime");
+    }
+
+    auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
+    CUDA_CHECK_LAST_ERROR("GFI::equality pool.getBufferOrCreate columnPoolAllocator");
+
+    auto _mask       = static_cast<size_t*>(cu::vectorToDevice(mask));
+    auto _tileOffset = static_cast<size_t*>(cu::vectorToDevice(tileOffset));
+    auto _tileSize   = static_cast<size_t*>(cu::vectorToDevice(tileSize));
+
+
+    {
+        dim3 grid((tileSize[table_1_index] + Cfg::BlockDim - 1) / (Cfg::BlockDim));
+        EqualityKernel::equality_kernel_date<<<grid, dim3(Cfg::BlockDim)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<dateTime*>(_col_1),
+                    *value.t,
+                    col_1->data.size(),
+
+                    _mask,
+                    table_1_index,
+
+                    _tileSize,
+                    _tileOffset
+                    );
+
+    }
+    CUDA_CHECK_LAST_ERROR("EqualityKernel::equality_kernel");
+
+    const auto size = result->totalSize();
+    dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
+    TensorKernel::extend_plain_kernel<<<grid, dim3(Cfg::BlockDim)>>>(result->data, result->totalSize(), _mask, _tileSize, mask.size());
+
+    CUDA_CHECK_LAST_ERROR("TensorKernel::extend_plain_kernel");
+
+    cu::free(_mask);
+    cu::free(_tileOffset);
+    cu::free(_tileSize);
+}
+
+
+void GFI::equality_time(tensor<char, Device::GPU> *result, column *col_1, tval value, std::vector<size_t> tileOffset,
+    std::vector<size_t> tileSize, size_t table_1_index, std::vector<size_t> mask) {
+
+    if (col_1->type != DateTime) {
+        throw UnsupportedOperationError("Expected col to have a type of dateTime");
+    }
+
+    auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
+    CUDA_CHECK_LAST_ERROR("GFI::equality pool.getBufferOrCreate columnPoolAllocator");
+
+    auto _mask       = static_cast<size_t*>(cu::vectorToDevice(mask));
+    auto _tileOffset = static_cast<size_t*>(cu::vectorToDevice(tileOffset));
+    auto _tileSize   = static_cast<size_t*>(cu::vectorToDevice(tileSize));
+
+
+    {
+        dim3 grid((tileSize[table_1_index] + Cfg::BlockDim - 1) / (Cfg::BlockDim));
+        EqualityKernel::equality_kernel_time<<<grid, dim3(Cfg::BlockDim)>>>(
+                    result->data,
+                    result->totalSize(),
+                    tileOffset.size(),
+
+                    static_cast<dateTime*>(_col_1),
+                    *value.t,
+                    col_1->data.size(),
+
+                    _mask,
+                    table_1_index,
+
+                    _tileSize,
+                    _tileOffset
+                    );
+
+    }
+    CUDA_CHECK_LAST_ERROR("EqualityKernel::equality_kernel");
+
+    const auto size = result->totalSize();
+    dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
+    TensorKernel::extend_plain_kernel<<<grid, dim3(Cfg::BlockDim)>>>(result->data, result->totalSize(), _mask, _tileSize, mask.size());
+
+    CUDA_CHECK_LAST_ERROR("TensorKernel::extend_plain_kernel");
+
+    cu::free(_mask);
+    cu::free(_tileOffset);
+    cu::free(_tileSize);
+}
+
 void GFI::inequality(
         tensor<char, Device::GPU> *result,
 

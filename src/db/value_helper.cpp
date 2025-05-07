@@ -139,14 +139,97 @@ std::string ValuesHelper::to_string(tval v, DataType t) {
     return "__non_type__";
 }
 
-std::optional<dateTime> ValuesHelper::parseDateTime(const std::string &input) {
+std::optional<dateTime> ValuesHelper::parseDateTimeDateOnly(const std::string &input) {
+    static const std::regex re(
+            R"(^\s*([0-9]{4})-([0-1]?[0-9])-([0-3]?[0-9])\s*$)"
+        );
+
+    std::smatch m;
+    if (!std::regex_match(input, m, re)) {
+        return std::nullopt;
+    }
+
+    // Convert captured strings to integers
+    int y = std::stoi(m[1].str());
+    int M = std::stoi(m[2].str());
+    int d = std::stoi(m[3].str());
+    int h   = 0;
+    int mnt = 0;
+    int s   = 0;
+
+    // Validate ranges more strictly if desired
+    if (M < 1 || M > 12 || d < 1 || d > 31)
+    {
+        return std::nullopt;
+    }
+
+    dateTime dt{
+        static_cast<uint16_t>(y),
+        static_cast<uint16_t>(M),
+         static_cast<uint16_t>(d),
+        static_cast<uint8_t>(h),
+        static_cast<uint8_t>(mnt),
+        static_cast<uint8_t>(s)
+    };
+
+    return dt;
+}
+
+std::optional<dateTime> ValuesHelper::parseDateTimeTimeOnly(const std::string &input) {
     // Regex capturing groups: year, month, day, hour, minute, second
     static const std::regex re(
-        R"(^([0-9]{4})-([0-1][0-9])\-([0-3][0-9])\s+([0-2][0-9]):([0-5][0-9]):([0-5][0-9])$)"
+        R"(^\s*([0-2]?[0-9]):([0-5]?[0-9]):([0-5]?[0-9])\s*$)"
     );
 
     std::smatch m;
     if (!std::regex_match(input, m, re)) {
+        return std::nullopt;
+    }
+
+    // Convert captured strings to integers
+    int y = 1970;
+    int M = 1;
+    int d = 1;
+    int h = std::stoi(m[1].str());
+    int mnt = std::stoi(m[2].str());
+    int s = std::stoi(m[3].str());
+
+    // Validate ranges more strictly if desired
+    if (h > 23 || mnt > 59 || s > 59)
+    {
+        return std::nullopt;
+    }
+
+    dateTime dt{
+        static_cast<uint16_t>(y),
+        static_cast<uint16_t>(M),
+         static_cast<uint16_t>(d),
+        static_cast<uint8_t>(h),
+        static_cast<uint8_t>(mnt),
+        static_cast<uint8_t>(s)
+    };
+
+    return dt;
+}
+
+std::optional<dateTime> ValuesHelper::parseDateTime(const std::string &input, bool strict) {
+    // Regex capturing groups: year, month, day, hour, minute, second
+    static const std::regex re(
+        R"(^\s*([0-9]{4})-([0-1]?[0-9])-([0-3]?[0-9])\s+([0-2]?[0-9]):([0-5]?[0-9]):([0-5]?[0-9])\s*$)"
+    );
+
+    std::smatch m;
+    if (!std::regex_match(input, m, re)) {
+        if (!strict) {
+            auto result = parseDateTimeDateOnly(input);
+            if (result != std::nullopt)
+                return *result;
+
+            result = parseDateTimeTimeOnly(input);
+            if (result != std::nullopt)
+                return *result;
+
+        }
         return std::nullopt;
     }
 

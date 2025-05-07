@@ -44,10 +44,24 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
 #ifdef OP_GREATER_DEBUG
         std::cout << "kExprOperator::Greater two literals" << std::endl;
 #endif
+        bool ok = true;
+
         auto left_ = ValuesHelper::getLiteralFrom(left);
         auto right_ = ValuesHelper::getLiteralFrom(right);
 
-        result->setAll(ValuesHelper::cmp(left_.first, right_.first, left_.second, right_.second) > 0 ? 1 : 0);
+        try {
+            result->setAll(ValuesHelper::cmp(left_.first, right_.first, left_.second, right_.second) > 0 ? 1 : 0);
+        } catch (...) {
+            ok = false;
+        }
+
+        ValuesHelper::deleteValue(left_.first, left_.second);
+        ValuesHelper::deleteValue(right_.first, right_.second);
+
+        if (!ok) {
+            throw std::invalid_argument("Type mismatch between two literals");
+        }
+
         return result;
     }
 

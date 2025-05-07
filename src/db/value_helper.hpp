@@ -101,9 +101,11 @@ namespace ValuesHelper {
 
     std::string to_string(tval, DataType);
 
-    std::optional<dateTime> parseDateTime(const std::string& input);
+    std::optional<dateTime> parseDateTimeTimeOnly(const std::string& input);
+    std::optional<dateTime> parseDateTimeDateOnly(const std::string& input);
+    std::optional<dateTime> parseDateTime(const std::string& input, bool strict = true);
 
-    inline tval castTo(tval in, DataType from, DataType to) {
+    inline tval castTo(tval in, DataType from, DataType to, bool strict = true) {
         switch (from) {
             case INTEGER:
                 switch (to) {
@@ -145,7 +147,7 @@ namespace ValuesHelper {
                     case FLOAT:
                         return create_from(static_cast<double>(std::stod(*in.s)));
                     case DateTime:
-                        return create_from(parseDateTime(*in.s).value());
+                        return create_from(parseDateTime(*in.s, strict).value());
                     case STRING:
                         return create_from(*in.s);
                 }
@@ -159,13 +161,13 @@ namespace ValuesHelper {
         tval a_v{ nullptr };
         tval b_v{ nullptr };
         if (common_type != a_t) {
-            a_v = castTo(a, a_t, common_type);
+            a_v = castTo(a, a_t, common_type, false);
         } else {
             a_v = a;
         }
 
         if (common_type != b_t) {
-            b_v = castTo(b, b_t, common_type);
+            b_v = castTo(b, b_t, common_type, false);
         } else {
             b_v = b;
         }

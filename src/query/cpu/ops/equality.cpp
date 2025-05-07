@@ -43,10 +43,25 @@ tensor<char, Device::CPU> * Ops::CPU::equality(
 #ifdef OP_EQUALS_DEBUG
         std::cout << "kExprOperator::Equals two literals" << std::endl;
 #endif
+
+        bool ok = true;
+
         auto left_ = ValuesHelper::getLiteralFrom(left);
         auto right_ = ValuesHelper::getLiteralFrom(right);
 
-        result->setAll(ValuesHelper::cmp(left_.first, right_.first, left_.second, right_.second) == 0 ? 1 : 0);
+        try {
+            result->setAll(ValuesHelper::cmp(left_.first, right_.first, left_.second, right_.second) == 0 ? 1 : 0);
+        } catch (...) {
+            ok = false;
+        }
+
+        ValuesHelper::deleteValue(left_.first, left_.second);
+        ValuesHelper::deleteValue(right_.first, right_.second);
+
+        if (!ok) {
+            throw std::invalid_argument("Type mismatch between two literals");
+        }
+
         return result;
     }
 
@@ -94,16 +109,33 @@ tensor<char, Device::CPU> * Ops::CPU::equality(
         ptrdiff_t pos = std::find(table_ptr->headers.begin(), table_ptr->headers.end(), col_name) - table_ptr->headers.begin();
         auto column_ptr = table_ptr->columns[pos];
 
-        auto literal_ = ValuesHelper::getLiteralFrom(literal);
         tval value{};
+        auto literal_ = ValuesHelper::getLiteralFrom(literal);
+        int dt_search_type = 0; // normal equality
         try {
             value = ValuesHelper::castTo(literal_.first, literal_.second, column_ptr->type);
         } catch (...) {
-            throw std::invalid_argument("Type mismatch between column and literal");
+            if (literal_.second == STRING && column_ptr->type == DateTime) {
+                auto _test = ValuesHelper::parseDateTimeDateOnly(*literal_.first.s);
+                if (_test != std::nullopt) {
+                    value = ValuesHelper::create_from(*_test);
+                    dt_search_type = 1; // search only on date
+                } else {
+                    _test = ValuesHelper::parseDateTimeTimeOnly(*literal_.first.s);
+                    if (_test != std::nullopt) {
+                        value = ValuesHelper::create_from(*_test);
+                        dt_search_type = 2; // search only on time
+                    } else {
+                        throw std::invalid_argument("Type mismatch between column and literal");
+                    }
+                }
+            } else {
+                throw std::invalid_argument("Type mismatch between column and literal");
+            }
         }
 
 
-        if (column_ptr->isHashIndexed()) {
+        if (column_ptr->isHashIndexed() && dt_search_type == 0) {
             // if the column is hash indexed, we can use that to speed up the search
             // we need to create a mask for the other columns
             // and a hyperplane position for the current column
@@ -155,7 +187,13 @@ tensor<char, Device::CPU> * Ops::CPU::equality(
 
             for (size_t i = result_offset[table_index]; i < result_offset[table_index] + result_size[table_index]; i++) {
                 const auto& val = column_ptr->data[i];
-                if (ValuesHelper::cmp(val, value, column_ptr->type) == 0) {
+                const auto cond = (
+                    (dt_search_type == 0 && ValuesHelper::cmp(val, value, column_ptr->type) == 0) ||
+                    (dt_search_type == 1 && (val.t->year == value.t->year && val.t->month == value.t->month && val.t->day == value.t->day)) ||
+                    (dt_search_type == 2 && (val.t->hour == value.t->hour && val.t->minute == value.t->minute && val.t->second == value.t->second))
+                );
+
+                if (cond) {
                     result->fill(1, hyperplane_pos, mask);
                 }
 
