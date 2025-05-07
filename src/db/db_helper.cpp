@@ -40,15 +40,28 @@ static std::vector<DataType> inferTypes(const csv::CSVRow& row) {
     return types;
 }
 
+inline std::string trim(const std::string& s) {
+    auto start = s.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos) return ""; // all whitespace
+
+    auto end = s.find_last_not_of(" \t\r\n");
+    return s.substr(start, end - start + 1);
+}
+
+inline std::string fixHeaderName(const std::string& name) {
+    size_t pos = name.find("(P)");
+    if (pos != std::string::npos && pos >= 2) {
+        return trim(name.substr(0, pos));
+    } else {
+        return trim(name);
+    }
+}
+
 table * DBHelper::fromCSV(std::string path) {
     csv::CSVReader csv(path);
     auto headers = csv.get_col_names();
-    auto headers_fixed = std::vector<std::string>(headers.size());
-    for (int i = 0;i < headers.size();i++) {
-        headers_fixed[i] = headers[i];
-        if (headers_fixed[i].ends_with("(P)")) {
-            headers_fixed[i] = headers[i].substr(0, headers[i].find_last_of(" (P)"));
-        }
+    for (auto & header : headers) {
+        header = fixHeaderName(header);
     }
 
     auto table   = new ::table();
@@ -195,12 +208,8 @@ table * DBHelper::fromCSV_Unchecked(std::string path) {
     }
 
     auto headers = parseCSVLine(lines[0]);
-    auto headers_fixed = std::vector<std::string>(headers.size());
-    for (int i = 0;i < headers.size();i++) {
-        headers_fixed[i] = headers[i];
-        if (headers_fixed[i].ends_with("(P)")) {
-            headers_fixed[i] = headers[i].substr(0, headers[i].find_last_of(" (P)"));
-        }
+    for (auto & header : headers) {
+        header = fixHeaderName(header);
     }
 
     std::vector<DataType> types;
@@ -351,3 +360,4 @@ bool DBHelper::toCSV(table *t, const std::string& path) {
 
     return true;
 }
+

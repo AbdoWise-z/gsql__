@@ -39,57 +39,19 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
     if (!tile_start.empty()) result_offset = tile_start;
 
     auto* result = new tensor<char, Device::GPU>(result_size);
-    result->setAll(0);
 
     if (left->isLiteral() && right->isLiteral()) {
 #ifdef OP_GREATER_DEBUG
         std::cout << "kExprOperator::Greater two literals" << std::endl;
 #endif
-                // both are literal, just check if they are equal
-        if (left->type != right->type) {
-            // we know they can't be equal if they can't be the same type (unless they are float and int)
-            // fixme: handle case where they are float or int
-#ifdef OP_GREATER_DEBUG
-            std::cout << "kExprOperator::Greater type mismatch" << std::endl;
-#endif
-            return result;
-        }
+        auto left_ = ValuesHelper::getLiteralFrom(left);
+        auto right_ = ValuesHelper::getLiteralFrom(right);
 
-        if (left->type == hsql::ExprType::kExprLiteralString) {
-#ifdef OP_GREATER_DEBUG
-            std::cout << "kExprOperator::Greater String, left=" << left->name << " & right=" << right->name << std::endl;
-#endif
-            int r = 0;
-            auto lt = ValuesHelper::parseDateTime(left->name);
-            auto rt = ValuesHelper::parseDateTime(left->name);
-            if (lt != std::nullopt && rt != std::nullopt) {
-                r = ValuesHelper::cmp(rt.value(), rt.value());
-            } else {
-                r = ValuesHelper::cmp(left->name, right->name);
-            }
-
-            result->setAll(r > 0 ? 1 : 0);
-            return result;
-        }
-
-        if (left->type == hsql::ExprType::kExprLiteralInt) {
-#ifdef OP_GREATER_DEBUG
-            std::cout << "kExprOperator::Greater Integer, left=" << left->ival << " & right=" << right->ival << std::endl;
-#endif
-            result->setAll(left->ival > right->ival);
-            return result;
-        }
-
-        if (left->type == hsql::ExprType::kExprLiteralFloat) {
-#ifdef OP_GREATER_DEBUG
-            std::cout << "kExprOperator::Greater Float, left=" << left->fval << " & right=" << right->fval << std::endl;
-#endif
-            result->setAll(left->fval > right->fval);
-            return result;
-        }
-
-        throw UnsupportedLiteralError();
+        result->setAll(ValuesHelper::cmp(left_.first, right_.first, left_.second, right_.second) > 0 ? 1 : 0);
+        return result;
     }
+
+    result->setAll(0);
 
     if (left->isLiteral() || right->isLiteral()) {
 #ifdef OP_GREATER_DEBUG
@@ -136,29 +98,13 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
         ptrdiff_t pos = std::find(table_ptr->headers.begin(), table_ptr->headers.end(), col_name) - table_ptr->headers.begin();
         auto column_ptr = table_ptr->columns[pos];
 
-        if ((column_ptr->type == STRING && literal->type != hsql::ExprType::kExprLiteralString) ||
-            (column_ptr->type == INTEGER && literal->type != hsql::ExprType::kExprLiteralInt) ||
-            (column_ptr->type == FLOAT && literal->type != hsql::ExprType::kExprLiteralFloat)
-            ) {
-
-            if (column_ptr->type == DateTime && literal->type != hsql::ExprType::kExprLiteralDate) {
-                auto dt = ValuesHelper::parseDateTime(literal->name);
-                if (dt == std::nullopt)
-                    throw std::invalid_argument("Type mismatch between column and literal");
-            } else {
-                throw std::invalid_argument("Type mismatch between column and literal");
-            }
+        auto literal_ = ValuesHelper::getLiteralFrom(literal);
+        tval value{};
+        try {
+            value = ValuesHelper::castTo(literal_.first, literal_.second, column_ptr->type);
+        } catch (...) {
+            throw std::invalid_argument("Type mismatch between column and literal");
         }
-
-        tval value;
-        if (column_ptr->type == STRING)
-            value = ValuesHelper::create_from(literal->name);
-        else if (column_ptr->type == INTEGER)
-            value = ValuesHelper::create_from(literal->ival);
-        else if (column_ptr->type == FLOAT)
-            value = ValuesHelper::create_from(literal->fval);
-        else
-            value = ValuesHelper::create_from(ValuesHelper::parseDateTime(literal->name).value());
 
         std::vector<uint64_t> mask;
         std::vector<size_t> hyperplane_pos;
@@ -184,7 +130,6 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
 #endif
 
             auto bucket = column_ptr->sortSearch(value, literal_on_left ? column::SST_LT : column::SST_GT);
-            ValuesHelper::deleteValue(value, column_ptr->type);
 
             for (auto r: bucket) {
                 if (r < result_offset[table_index] || r >= result_offset[table_index] + result_size[table_index]) {
@@ -209,6 +154,8 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
                 literal_on_left ? column::SST_LT : column::SST_GT // for kernel consistency assume literal is always col 2 (hance this order)
             );
         }
+
+        ValuesHelper::deleteValue(value, column_ptr->type);
 
         return result;
     }

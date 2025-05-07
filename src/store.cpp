@@ -22,6 +22,8 @@ namespace Cfg {
 
     size_t radixIntegerMaskSize = 4;
 
+    size_t useStreaming = 0;
+
     std::vector<size_t> getTileSizeFor(const std::vector<size_t>& inputSize) {
         std::vector<long double> factors;
         uint64_t totalSize = 0;

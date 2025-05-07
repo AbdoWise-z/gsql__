@@ -1467,7 +1467,7 @@ static std::vector<index_t> sort_dt_t(column* col_1) {
     std::vector<uint64_t> col_data(col_1->data.size(), 0);
     for (int i = 0;i < col_1->data.size();i++) {
         const auto dt = *(col_1->data[i].t);
-        const uint64_t bits = dt.year * 31104000 + dt.month * 2592000 + dt.day * 86000 + dt.hour * 3600 + dt.minute * 60 + dt.second;
+        const uint64_t bits = ValuesHelper::dateTimeToInt(dt);
         col_data[i] = bits;
     }
     cu::toDevice(col_data.data(), _col_1, size * sizeof(uint64_t));

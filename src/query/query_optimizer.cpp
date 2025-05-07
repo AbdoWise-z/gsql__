@@ -108,15 +108,15 @@ namespace QueryOptimizer {
 
     // Main recursive splitter: given any `where`, produce a list of steps
     // whose whereExpr is at most a binary-join predicate or conjunction thereof.
-    void GeneratePlan_recv(hsql::Expr*                         where,
+    void SegmentExpression_recv(hsql::Expr*                         where,
                                   std::vector<hsql::Expr*>&         result) {
         if (!where) return;
 
         // 1) If this is an OR, split into two branches and cartesian-combine
         if (where->type == hsql::kExprOperator && where->opType == hsql::kOpOr) {
             std::vector<hsql::Expr*> leftSteps, rightSteps;
-            GeneratePlan_recv(where->expr ,  leftSteps);
-            GeneratePlan_recv(where->expr2, rightSteps);
+            SegmentExpression_recv(where->expr ,  leftSteps);
+            SegmentExpression_recv(where->expr2, rightSteps);
 
             // Combine each left predicate with each right via a new OR node
             for (auto& L : leftSteps) {
@@ -149,9 +149,9 @@ namespace QueryOptimizer {
     }
 
 
-    std::vector<hsql::Expr*> GeneratePlan(hsql::Expr* where) {
+    std::vector<hsql::Expr*> SegmentExpression(hsql::Expr* where) {
         std::vector<hsql::Expr*> result;
-        GeneratePlan_recv(where, result);
+        SegmentExpression_recv(where, result);
         return result;
     }
 
@@ -243,7 +243,11 @@ namespace QueryOptimizer {
 
     std::vector<ExecutionStep> GeneratePlan(FromResolver::ResolveResult inputs, const hsql::SelectStatement* query) {
 
-        auto sub_wheres = GeneratePlan(query->whereClause);
+        auto sub_wheres = SegmentExpression(query->whereClause);
+
+        // for (auto where: sub_wheres) {
+        //     std::cout << exprToString(where) << std::endl;
+        // }
         std::vector<ExecutionStep> steps;
 
         for (auto where: sub_wheres) {
@@ -255,8 +259,20 @@ namespace QueryOptimizer {
             steps.push_back(step);
         }
 
+        hsql::Expr* expr = nullptr;
         std::vector<ExecutionStep> final_steps;
         for (auto& step: steps) {
+
+            if (expr) {
+                auto old = expr;
+                expr = new hsql::Expr(hsql::kExprOperator);
+                expr->opType = hsql::kOpAnd;
+                expr->expr = old;
+                expr->expr2 = step.query;
+            } else {
+                expr = step.query;
+            }
+
             if (!step.input.tables.empty()) { // only consider steps that has inputs
                 final_steps.push_back(step);  // empty steps can happen for any reason, for example: "select * from a where 1"
             }                                 // the where doesn't rely on any input
@@ -283,7 +299,7 @@ namespace QueryOptimizer {
             sub_input.isTemporary.push_back(false);
             sub_input.tables.push_back(inputs.tables[find(&inputs, *in.begin())]);
 
-            step.query = nullptr;
+            step.query = expr;
             step.input = sub_input;
             step.output_names = in;
             final_steps.push_back(step);

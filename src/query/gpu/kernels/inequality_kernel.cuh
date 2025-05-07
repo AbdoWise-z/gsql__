@@ -56,9 +56,19 @@ namespace InequalityKernel {
         return 1 * (a[i] > b[i]) + -1 * (a[i] < b[i]);
     }
 
+    ///
+    /// @param a
+    ///
+    /// @return dateTime encoded as integer
+    ///
+    /// @see values_helper.hpp#dateTimeToInt
+    __device__ inline int64_t dateTimeToInt(dateTime a) {
+        return a.year * 33177600 + a.month * 2764800 + a.day * 86000 + a.hour * 3600 + a.minute * 60 + a.second;
+    }
+
     __device__ inline int cmp(const dateTime& a, const dateTime& b) {
-        int64_t a_v = a.year * 31104000 + a.month * 2592000 + a.day * 86000 + a.hour * 3600 + a.minute * 60 + a.second;
-        int64_t b_v = b.year * 31104000 + b.month * 2592000 + b.day * 86000 + b.hour * 3600 + b.minute * 60 + b.second;
+        int64_t a_v = dateTimeToInt(a);
+        int64_t b_v = dateTimeToInt(b);
         return 1 * (a_v > b_v) + -1 * (a_v < b_v);
     }
 

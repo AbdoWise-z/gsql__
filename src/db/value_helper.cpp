@@ -19,6 +19,28 @@ namespace ValuesHelper {
     };
     int64_t  DefaultIntegerValue = 0;
     double   DefaultFloatValue   = 0;
+
+    std::map<std::pair<DataType, DataType>, DataType> conversionMap = {
+        {{INTEGER, INTEGER}, INTEGER},
+        {{INTEGER, FLOAT}, FLOAT},
+        {{INTEGER, DateTime}, DateTime},
+        {{INTEGER, STRING}, STRING},
+
+        {{FLOAT, INTEGER}, FLOAT},
+        {{FLOAT, FLOAT}, FLOAT},
+        {{FLOAT, DateTime}, INTEGER},
+        {{FLOAT, STRING}, STRING},
+
+        {{DateTime, INTEGER}, INTEGER},
+        {{DateTime, FLOAT}, INTEGER},
+        {{DateTime, DateTime}, DateTime},
+        {{DateTime, STRING}, STRING},
+
+        {{STRING, INTEGER}, STRING},
+        {{STRING, FLOAT}, STRING},
+        {{STRING, DateTime}, STRING},
+        {{STRING, STRING}, STRING},
+    };
 }
 
 int ValuesHelper::cmp(const int64_t& a, const int64_t& b) {
@@ -34,8 +56,8 @@ int ValuesHelper::cmp(const char* a, const char* b) {
 }
 
 int ValuesHelper::cmp(const dateTime &a, const dateTime &b) {
-    int64_t a_v = a.year * 31104000 + a.month * 2592000 + a.day * 86000 + a.hour * 3600 + a.minute * 60 + a.second;
-    int64_t b_v = b.year * 31104000 + b.month * 2592000 + b.day * 86000 + b.hour * 3600 + b.minute * 60 + b.second;
+    int64_t a_v = dateTimeToInt(a);
+    int64_t b_v = dateTimeToInt(b);
     return 1 * (a_v > b_v) + -1 * (a_v < b_v);
 }
 
@@ -154,3 +176,32 @@ std::optional<dateTime> ValuesHelper::parseDateTime(const std::string &input) {
 
     return dt;
 }
+
+std::pair<tval, DataType> ValuesHelper::getLiteralFrom(hsql::Expr * literal) {
+    tval literal_v {};
+    DataType literal_t = STRING;
+    if (literal->type == hsql::ExprType::kExprLiteralString) {
+        auto lt = ValuesHelper::parseDateTime(literal->name);
+        if (lt != std::nullopt) {
+            literal_v = ValuesHelper::create_from(*lt);
+            literal_t = DateTime;
+        } else {
+            literal_v = ValuesHelper::create_from(literal->name);
+            literal_t = STRING;
+        }
+    }
+
+    if (literal->type == hsql::ExprType::kExprLiteralInt) {
+        literal_t = INTEGER;
+        literal_v = ValuesHelper::create_from(literal->ival);
+    }
+
+    if (literal->type == hsql::ExprType::kExprLiteralFloat) {
+        literal_t = FLOAT;
+        literal_v = ValuesHelper::create_from(literal->fval);
+    }
+
+    return {literal_v, literal_t};
+}
+
+

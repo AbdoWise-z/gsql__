@@ -4,6 +4,7 @@
 
 #ifndef DB_HELPER_HPP
 #define DB_HELPER_HPP
+
 #include <string>
 
 #include "table.hpp"

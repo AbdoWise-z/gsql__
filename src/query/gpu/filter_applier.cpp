@@ -98,24 +98,24 @@ tensor<char, Device::GPU>* FilterApplier::GPU::apply(
         std::cout << "hsql::ExprType::kExprLiteralString" << std::endl;
 #endif
 
-        auto* result = new tensor<char, Device::GPU>({1});
-        result->set(0, strlen(eval->name) > 0 ? 1 : 0);
+        auto* result = new tensor<char, Device::GPU>(result_size);
+        result->setAll(strlen(eval->name) > 0 ? 1 : 0);
         return result;
     } else if (expr_type == hsql::ExprType::kExprLiteralInt) {
 #ifdef FILTER_DEBUG
         std::cout << "hsql::ExprType::kExprLiteralInt" << std::endl;
 #endif
 
-        auto* result = new tensor<char, Device::GPU>({1});
-        result->set(0, eval->ival > 0 ? 1 : 0);
+        auto* result = new tensor<char, Device::GPU>(result_size);
+        result->setAll(eval->ival > 0 ? 1 : 0);
         return result;
     } else if (expr_type == hsql::ExprType::kExprLiteralFloat) {
 #ifdef FILTER_DEBUG
         std::cout << "hsql::ExprType::kExprLiteralFloat" << std::endl;
 #endif
 
-        auto* result = new tensor<char, Device::GPU>({1});
-        result->set(0, eval->fval > 0 ? 1 : 0);
+        auto* result = new tensor<char, Device::GPU>(result_size);
+        result->setAll(eval->fval > 0 ? 1 : 0);
         return result;
     } else {
         throw UnsupportedOperatorError(eval->getName());

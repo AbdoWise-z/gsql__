@@ -33,9 +33,9 @@ namespace QueryOptimizer {
 
     // Main recursive splitter: given any `where`, produce a list of steps
     // whose whereExpr is at most a binary-join predicate or conjunction thereof.
-    void GeneratePlan_recv(hsql::Expr* where, std::vector<hsql::Expr*>& result);
+    void SegmentExpression_recv(hsql::Expr* where, std::vector<hsql::Expr*>& result);
 
-    std::vector<hsql::Expr*> GeneratePlan(hsql::Expr* where);
+    std::vector<hsql::Expr*> SegmentExpression(hsql::Expr* where);
 
     void getRequiredTables(FromResolver::ResolveResult& r, hsql::Expr* where,  std::set<std::string>& result);
 

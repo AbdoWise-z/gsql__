@@ -14,6 +14,16 @@ namespace FromResolver {
         std::vector<bool> isTemporary;
     };
 
+    inline bool shouldDeleteIntermediate(FromResolver::ResolveResult r, table* t) {
+        for (int i = 0;i < r.tables.size();i++) {
+            if (r.tables[i] == t) {
+                return false;
+            }
+        }
+
+        return true; // not in the input so it was created by us
+    }
+
     inline bool shouldDelete(FromResolver::ResolveResult r, table* t) {
         for (int i = 0;i < r.tables.size();i++) {
             if (r.tables[i] == t) {

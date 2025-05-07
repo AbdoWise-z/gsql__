@@ -43,44 +43,14 @@ tensor<char, Device::CPU> * Ops::CPU::equality(
 #ifdef OP_EQUALS_DEBUG
         std::cout << "kExprOperator::Equals two literals" << std::endl;
 #endif
-                // both are literal, just check if they are equal
-        if (left->type != right->type) {
-            // we know they can't be equal if they can't be the same type (unless they are float and int)
-            // fixme: handle case where they are float or int
-            result->setAll(0);
-#ifdef OP_EQUALS_DEBUG
-            std::cout << "kExprOperator::Equals type mismatch" << std::endl;
-#endif
-            return result;
-        }
+        auto left_ = ValuesHelper::getLiteralFrom(left);
+        auto right_ = ValuesHelper::getLiteralFrom(right);
 
-        if (left->type == hsql::ExprType::kExprLiteralString) {
-#ifdef OP_EQUALS_DEBUG
-            std::cout << "kExprOperator::Equals String, left=" << left->name << " & right=" << right->name << std::endl;
-#endif
-            auto r = strcmp(left->name, right->name);
-            result->setAll(r == 0 ? 1 : 0);
-            return result;
-        }
-
-        if (left->type == hsql::ExprType::kExprLiteralInt) {
-#ifdef OP_EQUALS_DEBUG
-            std::cout << "kExprOperator::Equals Integer, left=" << left->ival << " & right=" << right->ival << std::endl;
-#endif
-            result->setAll(left->ival == right->ival);
-            return result;
-        }
-
-        if (left->type == hsql::ExprType::kExprLiteralFloat) {
-#ifdef OP_EQUALS_DEBUG
-            std::cout << "kExprOperator::Equals Float, left=" << left->fval << " & right=" << right->fval << std::endl;
-#endif
-            result->setAll(left->fval == right->fval);
-            return result;
-        }
-
-        throw UnsupportedLiteralError();
+        result->setAll(ValuesHelper::cmp(left_.first, right_.first, left_.second, right_.second) == 0 ? 1 : 0);
+        return result;
     }
+
+    result->setAll(0);
 
     if (left->isLiteral() || right->isLiteral()) {
 #ifdef OP_EQUALS_DEBUG
@@ -124,12 +94,14 @@ tensor<char, Device::CPU> * Ops::CPU::equality(
         ptrdiff_t pos = std::find(table_ptr->headers.begin(), table_ptr->headers.end(), col_name) - table_ptr->headers.begin();
         auto column_ptr = table_ptr->columns[pos];
 
-        if ((column_ptr->type == STRING && literal->type != hsql::ExprType::kExprLiteralString) ||
-            (column_ptr->type == INTEGER && literal->type != hsql::ExprType::kExprLiteralInt) ||
-            (column_ptr->type == FLOAT && literal->type != hsql::ExprType::kExprLiteralFloat)
-            ) {
+        auto literal_ = ValuesHelper::getLiteralFrom(literal);
+        tval value{};
+        try {
+            value = ValuesHelper::castTo(literal_.first, literal_.second, column_ptr->type);
+        } catch (...) {
             throw std::invalid_argument("Type mismatch between column and literal");
         }
+
 
         if (column_ptr->isHashIndexed()) {
             // if the column is hash indexed, we can use that to speed up the search
@@ -153,18 +125,8 @@ tensor<char, Device::CPU> * Ops::CPU::equality(
                 }
             }
 
-            result->setAll(0);
-
-            tval value;
-            if (column_ptr->type == STRING)
-                value = ValuesHelper::create_from(literal->name);
-            else if (column_ptr->type == INTEGER)
-                value = ValuesHelper::create_from(literal->ival);
-            else
-                value = ValuesHelper::create_from(literal->fval);
 
             auto bucket = column_ptr->hashSearch(value);
-            ValuesHelper::deleteValue(value, column_ptr->type);
 
             for (auto r: bucket) {
                 if (r < result_offset[table_index] || r >= result_offset[table_index] + result_size[table_index]) {
@@ -191,47 +153,17 @@ tensor<char, Device::CPU> * Ops::CPU::equality(
                 }
             }
 
-            result->setAll(0);
-
-            if (column_ptr->type == STRING) {
-#ifdef OP_EQUALS_DEBUG
-                std::cout << "kExprOperator::Equals literal_val(str)=" << literal->name << std::endl;
-#endif
-                for (int i = result_offset[table_index]; i < result_offset[table_index] + result_size[table_index]; i++) {
-                    auto val = column_ptr->data[i];
-                    if (strcmp(val.s->c_str(), literal->name) == 0) {
-                        result->fill(1, hyperplane_pos, mask);
-                    }
-
-                    hyperplane_pos[table_index]++;
+            for (size_t i = result_offset[table_index]; i < result_offset[table_index] + result_size[table_index]; i++) {
+                const auto& val = column_ptr->data[i];
+                if (ValuesHelper::cmp(val, value, column_ptr->type) == 0) {
+                    result->fill(1, hyperplane_pos, mask);
                 }
-            } else if (column_ptr->type == INTEGER) {
-#ifdef OP_EQUALS_DEBUG
-                std::cout << "kExprOperator::Equals literal_val(int)=" << literal->ival << std::endl;
-#endif
-                for (int i = result_offset[table_index]; i < result_offset[table_index] + result_size[table_index]; i++) {
-                    auto val = column_ptr->data[i];
-                    if (val.i == literal->ival) {
-                        result->fill(1, hyperplane_pos, mask);
-                    }
 
-                    hyperplane_pos[table_index]++;
-                }
-            } else {
-#ifdef OP_EQUALS_DEBUG
-                std::cout << "kExprOperator::Equals literal_val(float)=" << literal->fval << std::endl;
-#endif
-                for (int i = result_offset[table_index]; i < result_offset[table_index] + result_size[table_index]; i++) {
-                    auto val = column_ptr->data[i];
-                    if (val.d == literal->fval) {
-                        result->fill(1, hyperplane_pos, mask);
-                    }
-
-                    hyperplane_pos[table_index]++;
-                }
+                hyperplane_pos[table_index]++;
             }
         }
 
+        ValuesHelper::deleteValue(value, column_ptr->type);
         return result;
     }
 

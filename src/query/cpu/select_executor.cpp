@@ -108,7 +108,7 @@ std::pair<std::set<std::string>, table*> SelectExecutor::CPU::Execute(hsql::SQLS
             }
 
             auto prev_ptr = result.result;
-            if (shouldDelete(global_query_input, prev_ptr)) delete prev_ptr;
+            if (shouldDeleteIntermediate(global_query_input, prev_ptr)) delete prev_ptr;
 
             result = local_result;
             result_tables.insert(query_input.table_names[0].begin(), query_input.table_names[0].end());
@@ -192,17 +192,9 @@ std::pair<std::set<std::string>, table*> SelectExecutor::CPU::Execute(hsql::SQLS
         }
 
         auto prev_ptr = result.result;
-        if (shouldDelete(global_query_input, prev_ptr)) delete prev_ptr;
+        if (shouldDeleteIntermediate(global_query_input, prev_ptr)) delete prev_ptr;
         result = local_result;
         result_tables = step.output_names;
-    }
-
-    // clean up any temp tables created in the process
-    for (int i = 0;i < global_query_input.tables.size();i++) {
-        // clean up
-        if (global_query_input.isTemporary[i]) {
-            delete global_query_input.tables[i];
-        }
     }
 
     // perform projection / aggregation
@@ -334,6 +326,7 @@ std::pair<std::set<std::string>, table*> SelectExecutor::CPU::Execute(hsql::SQLS
         }
     }
 
+
     auto orderBy = stmnt->order;
     if (orderBy && orderBy->size() > 1)
         throw UnsupportedOperationError("Order by is not supported with more than one col");
@@ -395,7 +388,15 @@ std::pair<std::set<std::string>, table*> SelectExecutor::CPU::Execute(hsql::SQLS
         final_result = final_final_pro_max;
     }
 
-    if (shouldDelete(global_query_input, result.result)) delete result.result;
+    if (shouldDeleteIntermediate(global_query_input, result.result)) delete result.result;
+
+    // clean up any temp tables created in the process
+    for (int i = 0;i < global_query_input.tables.size();i++) {
+        // clean up
+        if (global_query_input.isTemporary[i]) {
+            delete global_query_input.tables[i];
+        }
+    }
 
     return {result_tables, final_result};
 }
