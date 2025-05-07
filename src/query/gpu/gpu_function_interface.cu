@@ -35,6 +35,8 @@
         CUDA_CHECK_LAST_ERROR(#kernelLaunchCall); \
     } while (0)
 
+#define CUDA_CHECK(kernelLaunchCall) CUDA_LAUNCH_AND_CHECK(kernelLaunchCall)
+
 
 void GFI::fill(tensor<char, Device::GPU> *output_data, const char value) {
     const auto size = output_data->totalSize();
@@ -1426,6 +1428,151 @@ static std::vector<index_t> sort_int64_t(column* col_1) {
     return result;
 }
 
+static std::vector<index_t> sort_int64_t_streaming(column* col_1) {
+    if (col_1->type != INTEGER)
+        throw UnsupportedOperationError("Sort of type int on non-integer");
+
+    const size_t size = col_1->data.size();
+    std::vector<index_t> result(size);
+
+    // initialize result on host
+    for (size_t i = 0; i < size; ++i)
+        result[i] = i;
+
+    // allocate device buffers
+    index_t *d_col, *indices_in, *indices_out;
+    CUDA_LAUNCH_AND_CHECK(cudaMalloc(&d_col, sizeof(int64_t) * size));
+    CUDA_LAUNCH_AND_CHECK(cudaMalloc(&indices_in,  sizeof(index_t) * size));
+    CUDA_LAUNCH_AND_CHECK(cudaMalloc(&indices_out, sizeof(index_t) * size));
+
+    // copy full column and initial indices to device
+    CUDA_LAUNCH_AND_CHECK(cudaMemcpy(d_col, col_1->data.data(),
+                          sizeof(int64_t) * size,
+                          cudaMemcpyHostToDevice));
+    CUDA_LAUNCH_AND_CHECK(cudaMemcpy(indices_in, result.data(),
+                          sizeof(index_t) * size,
+                          cudaMemcpyHostToDevice));
+
+    // radix parameters
+    const int maskBits    = (1 << Cfg::radixIntegerMaskSize) - 1;
+    const int numBins     = 1 << Cfg::radixIntegerMaskSize;
+    int shiftBits         = 0;
+
+    // Allocate per-pass histogram and offsets (small)
+    index_t *d_histogram, *d_binOffsets;
+    CUDA_LAUNCH_AND_CHECK(cudaMalloc(&d_histogram,  sizeof(index_t) * numBins));
+    CUDA_LAUNCH_AND_CHECK(cudaMalloc(&d_binOffsets, sizeof(index_t) * numBins));
+
+    // Choose a chunk size for streaming (in elements)
+    const size_t CHUNK_SIZE = 1 << 20;
+
+    // Create a pool of streams for overlapping histogram compute and memcopies
+    const int NUM_STREAMS = Cfg::numStreams;
+    cudaStream_t streams[NUM_STREAMS];
+    for (int i = 0; i < NUM_STREAMS; ++i)
+        CUDA_LAUNCH_AND_CHECK(cudaStreamCreate(&streams[i]));
+
+    // Temporary per-chunk buffers for pins and local offsets
+    // Note: pins are size * numBins in total across all chunks
+    index_t *d_pins, *d_local;
+    CUDA_LAUNCH_AND_CHECK(cudaMalloc(&d_pins,  sizeof(index_t) * CHUNK_SIZE * numBins));
+    CUDA_LAUNCH_AND_CHECK(cudaMalloc(&d_local, sizeof(index_t) * CHUNK_SIZE * numBins));
+
+    // Launch parameters (constant)
+    dim3 grid_full((CHUNK_SIZE + Cfg::BlockDim - 1) / Cfg::BlockDim);
+    dim3 grid_hist((numBins + Cfg::BlockDim - 1) / Cfg::BlockDim);
+
+    // Main radix loop
+    while (shiftBits < 64) {
+        // zero out global histogram
+        CUDA_LAUNCH_AND_CHECK(cudaMemset(d_histogram, 0, sizeof(index_t) * numBins));
+
+        // 1) compute chunked histograms into pins array
+        size_t offset = 0, stream_idx = 0;
+        while (offset < size) {
+            size_t this_chunk = std::min(CHUNK_SIZE, size - offset);
+            auto s = streams[stream_idx];
+
+            OrderBy::histogram_kernel_indexed
+                <<<grid_hist, Cfg::BlockDim, 0, s>>>(
+                    (int64_t*)d_col + offset,
+                    indices_in         + offset,
+                    d_histogram,            // accumulate into global
+                    d_pins    + offset*numBins,
+                    this_chunk,
+                    maskBits,
+                    shiftBits,
+                    numBins
+                );
+            CUDA_CHECK_LAST_ERROR("histogram_kernel_indexed chunk");
+
+            offset     += this_chunk;
+            stream_idx  = (stream_idx + 1) % NUM_STREAMS;
+        }
+
+        // wait all chunk histograms
+        CUDA_LAUNCH_AND_CHECK(cudaDeviceSynchronize());
+
+        // 2) prefix-sum on the global histogram
+        run_prefix_sum(d_histogram, d_binOffsets, numBins);
+
+        // 3) for each chunk, do local prefix and scatter
+        offset     = 0;
+        stream_idx = 0;
+        while (offset < size) {
+            size_t this_chunk = std::min(CHUNK_SIZE, size - offset);
+            auto s = streams[stream_idx];
+
+            // local prefix per-bin
+            for (int b = 0; b < numBins; ++b) {
+                auto bin_pins   = d_pins   + offset*numBins + b*this_chunk;
+                auto bin_local  = d_local  + offset*numBins + b*this_chunk;
+                run_prefix_sum(bin_pins, bin_local, this_chunk);
+            }
+
+            // scatter chunk
+            OrderBy::radix_scatter_pass
+                <<<grid_full, Cfg::BlockDim, 0, s>>>(
+                    (int64_t*)d_col + offset,
+                    indices_in         + offset,
+                    indices_out        + offset,
+                    d_binOffsets,    // global start
+                    d_local   + offset*numBins,
+                    this_chunk,
+                    maskBits,
+                    shiftBits
+                );
+            CUDA_CHECK_LAST_ERROR("radix_scatter_pass chunk");
+
+            offset     += this_chunk;
+            stream_idx  = (stream_idx + 1) % NUM_STREAMS;
+        }
+
+        // sync and swap buffers
+        CUDA_LAUNCH_AND_CHECK(cudaDeviceSynchronize());
+        std::swap(indices_in, indices_out);
+
+        shiftBits += Cfg::radixIntegerMaskSize;
+    }
+
+    // copy back sorted indices
+    CUDA_LAUNCH_AND_CHECK(cudaMemcpy(result.data(), indices_in,
+                          sizeof(index_t) * size,
+                          cudaMemcpyDeviceToHost));
+
+    // cleanup
+    CUDA_LAUNCH_AND_CHECK(cudaFree(d_col));
+    CUDA_LAUNCH_AND_CHECK(cudaFree(indices_in));
+    CUDA_LAUNCH_AND_CHECK(cudaFree(indices_out));
+    CUDA_LAUNCH_AND_CHECK(cudaFree(d_histogram));
+    CUDA_LAUNCH_AND_CHECK(cudaFree(d_binOffsets));
+    CUDA_LAUNCH_AND_CHECK(cudaFree(d_pins));
+    CUDA_LAUNCH_AND_CHECK(cudaFree(d_local));
+    for (auto &s : streams) cudaStreamDestroy(s);
+
+    return result;
+}
+
 static std::vector<index_t> sort_double_t(column* col_1) {
     if (col_1->type != FLOAT) throw UnsupportedOperationError("Sort of type float on non-float");
 
@@ -1543,6 +1690,153 @@ static std::vector<index_t> sort_double_t(column* col_1) {
     cu::free(pins);
     cu::free(pins_offset);
     cu::free(_col_1);
+
+    return result;
+}
+
+
+static std::vector<index_t> sort_double_t_streaming(column* col_1) {
+    if (col_1->type != FLOAT)
+        throw UnsupportedOperationError("Sort of type float on non-float");
+
+    const size_t size = col_1->data.size();
+    std::vector<index_t> result(size);
+    for (size_t i = 0; i < size; ++i)
+        result[i] = i;
+
+    // --- Device buffers ---
+    uint64_t *d_bits = nullptr;
+    index_t  *d_in  = nullptr, *d_out = nullptr;
+    CUDA_LAUNCH_AND_CHECK(cudaMalloc(&d_bits, sizeof(uint64_t) * size));
+    CUDA_CHECK(cudaMalloc(&d_in,   sizeof(index_t)  * size));
+    CUDA_CHECK(cudaMalloc(&d_out,  sizeof(index_t)  * size));
+
+    // Prepare host bit‐mapped array:
+    std::vector<uint64_t> host_bits(size);
+    for (size_t i = 0; i < size; ++i) {
+        uint64_t bits = *reinterpret_cast<const uint64_t*>(&col_1->data[i].d);
+        // flip sign‐bit to get correct lexicographic ordering
+        host_bits[i] = (bits & 0x8000000000000000ULL)
+                       ? ~bits
+                       : (bits ^ 0x8000000000000000ULL);
+    }
+    CUDA_CHECK(cudaMemcpy(d_bits, host_bits.data(),
+                          sizeof(uint64_t) * size,
+                          cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_in,  result.data(),
+                          sizeof(index_t) * size,
+                          cudaMemcpyHostToDevice));
+
+    // --- Radix params ---
+    const int   maskBitsTotal = Cfg::radixIntegerMaskSize;
+    const int   numBins       = 1 << maskBitsTotal;
+    const int   maskBits      = numBins - 1;
+    int         shiftBits     = 0;
+
+    // Allocate small per-pass arrays
+    index_t *d_hist    = nullptr, *d_binOffsets = nullptr;
+    CUDA_CHECK(cudaMalloc(&d_hist,       sizeof(index_t) * numBins));
+    CUDA_CHECK(cudaMalloc(&d_binOffsets, sizeof(index_t) * numBins));
+
+    // Chunking parameters
+    const size_t CHUNK_SIZE = 1 << 20;            // elements per chunk
+    const int    NUM_STREAMS = Cfg::numStreams;
+    cudaStream_t streams[NUM_STREAMS];
+    for (int i = 0; i < NUM_STREAMS; ++i)
+        CUDA_CHECK(cudaStreamCreate(&streams[i]));
+
+    // Temp per-chunk pin arrays
+    index_t *d_pins   = nullptr, *d_local = nullptr;
+    CUDA_CHECK(cudaMalloc(&d_pins,   sizeof(index_t) * CHUNK_SIZE * numBins));
+    CUDA_CHECK(cudaMalloc(&d_local,  sizeof(index_t) * CHUNK_SIZE * numBins));
+
+    // Grid dims
+    dim3 grid_hist((numBins + Cfg::BlockDim - 1) / Cfg::BlockDim);
+    dim3 grid_chunk((CHUNK_SIZE + Cfg::BlockDim - 1) / Cfg::BlockDim);
+
+    // --- Main radix loop ---
+    while (shiftBits < 64) {
+        // zero‐histogram
+        CUDA_CHECK(cudaMemset(d_hist, 0, sizeof(index_t) * numBins));
+
+        // 1) Chunked histogram accumulation
+        size_t offset = 0, sidx = 0;
+        while (offset < size) {
+            size_t chunk = std::min(CHUNK_SIZE, size - offset);
+            auto   s     = streams[sidx];
+            OrderBy::histogram_kernel_indexed
+                <<<grid_hist, Cfg::BlockDim, 0, s>>>(
+                    (const int64_t*)(d_bits + offset),
+                    d_in  + offset,
+                    d_hist,
+                    d_pins  + offset * numBins,
+                    chunk,
+                    maskBits,
+                    shiftBits,
+                    numBins
+                );
+            CUDA_CHECK_LAST_ERROR("float histogram chunk");
+
+            offset += chunk;
+            sidx    = (sidx + 1) % NUM_STREAMS;
+        }
+        CUDA_CHECK(cudaDeviceSynchronize());
+
+        // 2) Global prefix‐sum on d_hist → d_binOffsets
+        run_prefix_sum(d_hist, d_binOffsets, numBins);
+
+        // 3) Per‐chunk local prefix + scatter
+        offset = 0; sidx = 0;
+        while (offset < size) {
+            size_t chunk = std::min(CHUNK_SIZE, size - offset);
+            auto   s     = streams[sidx];
+
+            // local per‐bin prefix
+            for (int b = 0; b < numBins; ++b) {
+                auto pins_ptr  = d_pins   + offset * numBins + b * chunk;
+                auto local_ptr = d_local  + offset * numBins + b * chunk;
+                run_prefix_sum(pins_ptr, local_ptr, chunk);
+            }
+
+            // scatter pass
+            OrderBy::radix_scatter_pass
+                <<<grid_chunk, Cfg::BlockDim, 0, s>>>(
+                    (const int64_t*)(d_bits + offset),
+                    d_in   + offset,
+                    d_out  + offset,
+                    d_binOffsets,
+                    d_local + offset * numBins,
+                    chunk,
+                    maskBits,
+                    shiftBits
+                );
+            CUDA_CHECK_LAST_ERROR("float scatter chunk");
+
+            offset += chunk;
+            sidx    = (sidx + 1) % NUM_STREAMS;
+        }
+        CUDA_CHECK(cudaDeviceSynchronize());
+
+        // swap buffers
+        std::swap(d_in, d_out);
+        shiftBits += maskBitsTotal;
+    }
+
+    // copy back
+    CUDA_CHECK(cudaMemcpy(result.data(), d_in,
+                          sizeof(index_t) * size,
+                          cudaMemcpyDeviceToHost));
+
+    // cleanup
+    cudaFree(d_bits);
+    cudaFree(d_in);
+    cudaFree(d_out);
+    cudaFree(d_hist);
+    cudaFree(d_binOffsets);
+    cudaFree(d_pins);
+    cudaFree(d_local);
+    for (int i = 0; i < NUM_STREAMS; ++i)
+        cudaStreamDestroy(streams[i]);
 
     return result;
 }
@@ -1670,6 +1964,148 @@ static std::vector<index_t> sort_dt_t(column* col_1) {
     return result;
 }
 
+static std::vector<index_t> sort_dt_t_streaming(column* col_1) {
+    if (col_1->type != DateTime)
+        throw UnsupportedOperationError("Sort of type DateTime on non-DateTime");
+
+    const size_t size = col_1->data.size();
+    std::vector<index_t> result(size);
+    for (size_t i = 0; i < size; ++i)
+        result[i] = i;
+
+    // --- Device buffers ---
+    uint64_t *d_bits = nullptr;
+    index_t  *d_in   = nullptr, *d_out = nullptr;
+    CUDA_CHECK(cudaMalloc(&d_bits, sizeof(uint64_t) * size));
+    CUDA_CHECK(cudaMalloc(&d_in,   sizeof(index_t)  * size));
+    CUDA_CHECK(cudaMalloc(&d_out,  sizeof(index_t)  * size));
+
+    // Host→device: pack DateTime into uint64_t via your helper
+    std::vector<uint64_t> host_bits(size);
+    for (size_t i = 0; i < size; ++i) {
+        const auto dt = *(col_1->data[i].t);
+        host_bits[i]  = ValuesHelper::dateTimeToInt(dt);
+    }
+    CUDA_CHECK(cudaMemcpy(d_bits, host_bits.data(),
+                          sizeof(uint64_t) * size,
+                          cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_in, result.data(),
+                          sizeof(index_t) * size,
+                          cudaMemcpyHostToDevice));
+
+    // --- Radix parameters ---
+    const int   maskSizeTotal = Cfg::radixIntegerMaskSize;
+    const int   numBins       = 1 << maskSizeTotal;
+    const int   maskBits      = numBins - 1;
+    int         shiftBits     = 0;
+
+    // small per-pass arrays
+    index_t *d_hist = nullptr, *d_binOffsets = nullptr;
+    CUDA_CHECK(cudaMalloc(&d_hist,       sizeof(index_t) * numBins));
+    CUDA_CHECK(cudaMalloc(&d_binOffsets, sizeof(index_t) * numBins));
+
+    // chunking
+    const size_t CHUNK_SIZE = 1 << 20;
+    const int    NUM_STREAMS = Cfg::numStreams;
+    cudaStream_t streams[NUM_STREAMS];
+    for (int i = 0; i < NUM_STREAMS; ++i)
+        CUDA_CHECK(cudaStreamCreate(&streams[i]));
+
+    // per-chunk pin/local arrays
+    index_t *d_pins  = nullptr, *d_local = nullptr;
+    CUDA_CHECK(cudaMalloc(&d_pins,  sizeof(index_t) * CHUNK_SIZE * numBins));
+    CUDA_CHECK(cudaMalloc(&d_local, sizeof(index_t) * CHUNK_SIZE * numBins));
+
+    // grid dims
+    dim3 grid_hist((numBins + Cfg::BlockDim - 1) / Cfg::BlockDim);
+    dim3 grid_chunk((CHUNK_SIZE + Cfg::BlockDim - 1) / Cfg::BlockDim);
+
+    // --- Main radix loop ---
+    while (shiftBits < 64) {
+        // zero histogram
+        CUDA_CHECK(cudaMemset(d_hist, 0, sizeof(index_t) * numBins));
+
+        // 1) chunked histogram into d_hist
+        size_t offset = 0, sidx = 0;
+        while (offset < size) {
+            size_t chunk = std::min(CHUNK_SIZE, size - offset);
+            auto   s     = streams[sidx];
+            OrderBy::histogram_kernel_indexed
+                <<<grid_hist, Cfg::BlockDim, 0, s>>>(
+                    (const int64_t*)(d_bits + offset),
+                    d_in  + offset,
+                    d_hist,
+                    d_pins  + offset * numBins,
+                    chunk,
+                    maskBits,
+                    shiftBits,
+                    numBins
+                );
+            CUDA_CHECK_LAST_ERROR("dt histogram chunk");
+
+            offset += chunk;
+            sidx    = (sidx + 1) % NUM_STREAMS;
+        }
+        CUDA_CHECK(cudaDeviceSynchronize());
+
+        // 2) prefix-sum on d_hist → d_binOffsets
+        run_prefix_sum(d_hist, d_binOffsets, numBins);
+
+        // 3) per-chunk local prefix + scatter
+        offset = 0; sidx = 0;
+        while (offset < size) {
+            size_t chunk = std::min(CHUNK_SIZE, size - offset);
+            auto   s     = streams[sidx];
+
+            // local prefix per bin
+            for (int b = 0; b < numBins; ++b) {
+                auto pins_ptr  = d_pins   + offset * numBins + b * chunk;
+                auto local_ptr = d_local  + offset * numBins + b * chunk;
+                run_prefix_sum(pins_ptr, local_ptr, chunk);
+            }
+
+            // scatter
+            OrderBy::radix_scatter_pass
+                <<<grid_chunk, Cfg::BlockDim, 0, s>>>(
+                    (const int64_t*)(d_bits + offset),
+                    d_in   + offset,
+                    d_out  + offset,
+                    d_binOffsets,
+                    d_local + offset * numBins,
+                    chunk,
+                    maskBits,
+                    shiftBits
+                );
+            CUDA_CHECK_LAST_ERROR("dt scatter chunk");
+
+            offset += chunk;
+            sidx    = (sidx + 1) % NUM_STREAMS;
+        }
+        CUDA_CHECK(cudaDeviceSynchronize());
+
+        // swap and next digit
+        std::swap(d_in, d_out);
+        shiftBits += maskSizeTotal;
+    }
+
+    // copy back
+    CUDA_CHECK(cudaMemcpy(result.data(), d_in,
+                          sizeof(index_t) * size,
+                          cudaMemcpyDeviceToHost));
+
+    // cleanup
+    cudaFree(d_bits);
+    cudaFree(d_in);
+    cudaFree(d_out);
+    cudaFree(d_hist);
+    cudaFree(d_binOffsets);
+    cudaFree(d_pins);
+    cudaFree(d_local);
+    for (int i = 0; i < NUM_STREAMS; ++i)
+        cudaStreamDestroy(streams[i]);
+
+    return result;
+}
 
 static std::vector<index_t> sort_string_t(column* col) {
     if (col->type != STRING) throw UnsupportedOperationError("Sort of type String on non-String");
@@ -1811,15 +2247,179 @@ static std::vector<index_t> sort_string_t(column* col) {
 }
 
 
+static std::vector<index_t> sort_string_t_streaming(column* col) {
+    if (col->type != STRING)
+        throw UnsupportedOperationError("Sort of type String on non-String");
+
+    const size_t size = col->data.size();
+    std::vector<index_t> result(size);
+    for (size_t i = 0; i < size; ++i)
+        result[i] = i;
+
+    // --- Transfer strings to GPU buffers ---
+    std::vector<const char*> host_ptrs(size);
+    std::vector<size_t>      host_sizes(size);
+    size_t max_len = 0;
+    for (size_t i = 0; i < size; ++i) {
+        auto s = col->data[i].s;
+        auto gpu_str = cu::malloc(s->size() + 1);
+        cu::toDevice(s->c_str(), gpu_str, s->size() + 1);
+        host_ptrs[i]  = (const char*)gpu_str;
+        host_sizes[i] = s->size();
+        max_len       = std::max(max_len, s->size());
+    }
+
+    const size_t PTR_BUF  = sizeof(const char*) * size;
+    const size_t SZ_BUF   = sizeof(size_t)     * size;
+    const size_t IDX_BUF  = sizeof(index_t)    * size;
+
+    const char** d_ptrs   = nullptr;
+    size_t*      d_sizes  = nullptr;
+    index_t*     d_in     = nullptr;
+    index_t*     d_out    = nullptr;
+
+    CUDA_CHECK(cudaMalloc(&d_ptrs,  PTR_BUF));
+    CUDA_CHECK(cudaMalloc(&d_sizes, SZ_BUF));
+    CUDA_CHECK(cudaMalloc(&d_in,    IDX_BUF));
+    CUDA_CHECK(cudaMalloc(&d_out,   IDX_BUF));
+
+    CUDA_CHECK(cudaMemcpy(d_ptrs,  host_ptrs.data(), PTR_BUF, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_sizes, host_sizes.data(), SZ_BUF, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_in,    result.data(),     IDX_BUF, cudaMemcpyHostToDevice));
+
+    // --- Radix parameters ---
+    const int   maskSize   = 8;
+    const int   numBins    = 1 << maskSize;
+    const size_t CHUNK_SIZE = 1 << 20;
+    const int   NUM_STREAMS = Cfg::numStreams;
+
+    // small per-pass arrays
+    index_t *d_hist       = nullptr, *d_binOffsets = nullptr;
+    index_t *d_pins       = nullptr, *d_local      = nullptr;
+
+    CUDA_CHECK(cudaMalloc(&d_hist,      sizeof(index_t) * numBins));
+    CUDA_CHECK(cudaMalloc(&d_binOffsets, sizeof(index_t) * numBins));
+    CUDA_CHECK(cudaMalloc(&d_pins,      sizeof(index_t) * CHUNK_SIZE * numBins));
+    CUDA_CHECK(cudaMalloc(&d_local,     sizeof(index_t) * CHUNK_SIZE * numBins));
+
+    // create streams
+    cudaStream_t streams[NUM_STREAMS];
+    for (int i = 0; i < NUM_STREAMS; ++i)
+        CUDA_CHECK(cudaStreamCreate(&streams[i]));
+
+    dim3 grid_bins( (numBins + Cfg::BlockDim - 1) / Cfg::BlockDim );
+    dim3 grid_chunk( (CHUNK_SIZE + Cfg::BlockDim - 1) / Cfg::BlockDim );
+
+    size_t curr_char = 0;
+    while (curr_char < max_len) {
+        // zero global histogram
+        CUDA_CHECK(cudaMemset(d_hist, 0, sizeof(index_t) * numBins));
+
+        // 1) chunked histogram accumulation
+        size_t offset = 0, sidx = 0;
+        while (offset < size) {
+            size_t chunk = std::min(CHUNK_SIZE, size - offset);
+            auto   s     = streams[sidx];
+
+            OrderBy::histogram_kernel_indexed
+              <<<grid_bins, Cfg::BlockDim, 0, s>>>(
+                d_ptrs,
+                d_sizes,
+                d_in   + offset,
+                d_hist,
+                d_pins + offset * numBins,
+                chunk,
+                curr_char,
+                max_len
+            );
+            CUDA_CHECK_LAST_ERROR("string histogram chunk");
+
+            offset += chunk;
+            sidx    = (sidx + 1) % NUM_STREAMS;
+        }
+        CUDA_CHECK(cudaDeviceSynchronize());
+
+        // 2) prefix-sum on global histogram → binOffsets
+        run_prefix_sum(d_hist, d_binOffsets, numBins);
+
+        // 3) per-chunk local prefix & scatter
+        offset = 0; sidx = 0;
+        while (offset < size) {
+            size_t chunk = std::min(CHUNK_SIZE, size - offset);
+            auto   s     = streams[sidx];
+
+            // local prefix for each bin within this chunk
+            for (int b = 0; b < numBins; ++b) {
+                auto pins_ptr  = d_pins   + offset * numBins + b * chunk;
+                auto local_ptr = d_local  + offset * numBins + b * chunk;
+                run_prefix_sum(pins_ptr, local_ptr, chunk);
+            }
+
+            OrderBy::radix_scatter_pass
+              <<<grid_chunk, Cfg::BlockDim, 0, s>>>(
+                d_ptrs,
+                d_sizes,
+                d_in    + offset,
+                d_out   + offset,
+                d_binOffsets,
+                d_local + offset * numBins,
+                chunk,
+                curr_char,
+                max_len
+            );
+            CUDA_CHECK_LAST_ERROR("string scatter chunk");
+
+            offset += chunk;
+            sidx    = (sidx + 1) % NUM_STREAMS;
+        }
+        CUDA_CHECK(cudaDeviceSynchronize());
+
+        // swap buffers & next character
+        std::swap(d_in, d_out);
+        curr_char += 1;
+    }
+
+    // copy back final ordering
+    CUDA_CHECK(cudaMemcpy(result.data(), d_in,
+                          sizeof(index_t) * size,
+                          cudaMemcpyDeviceToHost));
+
+    // cleanup
+    cudaFree(d_ptrs);
+    cudaFree(d_sizes);
+    cudaFree(d_in);
+    cudaFree(d_out);
+    cudaFree(d_hist);
+    cudaFree(d_binOffsets);
+    cudaFree(d_pins);
+    cudaFree(d_local);
+    for (int i = 0; i < NUM_STREAMS; ++i)
+        cudaStreamDestroy(streams[i]);
+    for (auto p : host_ptrs)
+        cu::free((void*)p);
+
+    return result;
+}
+
+
+
 std::vector<index_t> GFI::sort(column *col_1) {
     switch (col_1->type) {
         case INTEGER:
+            if (Cfg::numStreams > 0)
+                return sort_int64_t_streaming(col_1);
             return sort_int64_t(col_1);
         case FLOAT:
+            if (Cfg::numStreams > 0)
+                return sort_double_t_streaming(col_1);
             return sort_double_t(col_1);
         case STRING:
+            if (Cfg::numStreams > 0)
+                return sort_string_t_streaming(col_1);
             return sort_string_t(col_1);
         case DateTime:
+            if (Cfg::numStreams > 0)
+                return sort_dt_t_streaming(col_1);
             return sort_dt_t(col_1);
     }
 

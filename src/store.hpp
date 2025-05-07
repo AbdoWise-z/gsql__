@@ -64,6 +64,8 @@ namespace Cfg {
 
     extern size_t radixIntegerMaskSize;
 
+    extern size_t numStreams;
+
     std::vector<size_t> getTileSizeFor(const std::vector<size_t>& inputSize);
 }
 
