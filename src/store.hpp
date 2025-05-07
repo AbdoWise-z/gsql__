@@ -55,12 +55,12 @@ namespace Cfg {
 
     extern size_t maxTensorElements;
 
+    extern size_t useAccelerator;
+
     extern size_t BlockDim;
     extern size_t BlockDim2D;
 
     extern size_t maxGPUMemory;
-
-    extern size_t useAccelerator;
 
     extern size_t radixIntegerMaskSize;
 

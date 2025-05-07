@@ -320,6 +320,56 @@ void cfg(std::vector<std::string> params) {
         }
     }
 
+    if (params[0] == "bd") {
+        try {
+            Cfg::BlockDim = std::stoi(params[1]);
+            std::cout << "Updated: " << color("Cfg::BlockDim", CYAN_FG) << " = " << Cfg::BlockDim << std::endl;
+            return;
+        } catch (std::exception& e) {
+            std::cout << "Error modifying configuration: " << e.what() << std::endl;
+        }
+    }
+
+    if (params[0] == "bd2") {
+        try {
+            Cfg::BlockDim2D = std::stoi(params[1]);
+            std::cout << "Updated: " << color("Cfg::BlockDim2D", CYAN_FG) << " = " << Cfg::BlockDim2D << std::endl;
+            return;
+        } catch (std::exception& e) {
+            std::cout << "Error modifying configuration: " << e.what() << std::endl;
+        }
+    }
+
+    if (params[0] == "mGM") {
+        try {
+            Cfg::maxGPUMemory = std::stoi(params[1]);
+            std::cout << "Updated: " << color("Cfg::maxGPUMemory", CYAN_FG) << " = " << Cfg::maxGPUMemory << std::endl;
+            return;
+        } catch (std::exception& e) {
+            std::cout << "Error modifying configuration: " << e.what() << std::endl;
+        }
+    }
+
+    if (params[0] == "rIMS") {
+        try {
+            Cfg::radixIntegerMaskSize = std::stoi(params[1]);
+            std::cout << "Updated: " << color("Cfg::radixIntegerMaskSize", CYAN_FG) << " = " << Cfg::radixIntegerMaskSize << std::endl;
+            return;
+        } catch (std::exception& e) {
+            std::cout << "Error modifying configuration: " << e.what() << std::endl;
+        }
+    }
+
+    if (params[0] == "nS") {
+        try {
+            Cfg::numStreams = std::stoi(params[1]);
+            std::cout << "Updated: " << color("Cfg::numStreams", CYAN_FG) << " = " << Cfg::numStreams << std::endl;
+            return;
+        } catch (std::exception& e) {
+            std::cout << "Error modifying configuration: " << e.what() << std::endl;
+        }
+    }
+
     std::cout << "Unknown param." << std::endl;
 }
 
