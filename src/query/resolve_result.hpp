@@ -5,6 +5,7 @@
 #ifndef RESOLVE_RESULT_HPP
 #define RESOLVE_RESULT_HPP
 
+#include "store.hpp"
 #include "../db/table.hpp"
 
 namespace FromResolver {
@@ -35,24 +36,58 @@ namespace FromResolver {
     }
 
 
-    inline int find(ResolveResult *a, std::string tname) {
-        for (int i = 0;i < a->table_names.size();i++) {
-            if (a->table_names[i].contains(tname)) {
-                return i;
+    inline int find(std::vector<std::set<std::string>> a, const std::string& tname) {
+        int idx = -1;
+        for (int i = 0;i < a.size();i++) {
+            if (a[i].contains(tname)){
+                if (idx != -1) return -2; // ambiguous
+                idx = i;
             }
         }
 
-        return -1;
+        // fixme: handle exceptions here instead ?
+
+        return idx;
     }
 
-    inline int find(std::vector<std::set<std::string>> a, std::string tname) {
-        for (int i = 0;i < a.size();i++) {
-            if (a[i].contains(tname)) {
-                return i;
+    inline table* find(TableMap t, const std::string& tname, bool autoError = true) {
+        table* ret = nullptr;
+
+        for (auto& [k, v] : t) {
+            if (k.contains(tname)) {
+                if (ret && autoError) {
+                    throw std::invalid_argument("Table name [" + tname + "] is ambergris.");
+                }
+
+                ret = v;
             }
         }
 
-        return -1;
+        return ret;
+    }
+
+    inline TableMap::key_type find_it(TableMap t, const std::string& tname, bool autoError = true) {
+        auto it = t.begin();
+        auto result = t.end();
+        while (it != t.end()) {
+            if (it->first.contains(tname)) {
+                if (result != t.end() && autoError) {
+                    throw std::invalid_argument("Table name [" + tname + "] is ambergris.");
+                }
+                result = it;
+            }
+            ++it;
+        }
+
+        if (result == t.end()) {
+            return {};
+        }
+
+        return result->first;
+    }
+
+    inline int find(ResolveResult *a, std::string tname) {
+        return find(a->table_names, tname);
     }
 
     inline ResolveResult merge(ResolveResult *a, ResolveResult *b) {

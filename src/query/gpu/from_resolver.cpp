@@ -21,7 +21,8 @@ FromResolver::ResolveResult FromResolver::GPU::resolve(hsql::TableRef * ref, Tab
         std::string name = ref->name;
         std::string t_name = ref->name;
 
-        if (!tables.contains(name)) {
+        auto table = FromResolver::find(tables, name, false);
+        if (!table) {
             throw NoSuchTableError(name);
         }
 
@@ -30,7 +31,7 @@ FromResolver::ResolveResult FromResolver::GPU::resolve(hsql::TableRef * ref, Tab
         }
 
         table_names.push_back({t_name});
-        table_values.push_back(tables[name]);
+        table_values.push_back(table);
         temporary_table.push_back(false);
 
     } else if (ref->type == hsql::kTableSelect) {

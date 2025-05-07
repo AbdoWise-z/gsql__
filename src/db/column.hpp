@@ -13,6 +13,7 @@ union tval;
 class column {
 public:
     std::vector<tval> data;
+    std::vector<char> nulls;
     DataType type;
 
     std::vector<size_t>              sorted;

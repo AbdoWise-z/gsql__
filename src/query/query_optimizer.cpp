@@ -230,7 +230,7 @@ namespace QueryOptimizer {
         FromResolver::ResolveResult result;
         for (const auto& i : req) {
             auto idx = FromResolver::find(&r, i);
-            if (idx == -1) {
+            if (idx < 0) {
                 throw NoSuchTableError(i);
             }
             result.table_names.push_back({i});
@@ -284,14 +284,15 @@ namespace QueryOptimizer {
             for (auto& tables: step.input.table_names) {
                 for (auto& t_name: tables) {
                     auto idx = FromResolver::find(UnusedTables, t_name);
-                    if (idx != -1) {
+                    if (idx > 0) {
                         UnusedTables.erase(UnusedTables.begin() + idx);
                     }
                 }
             }
         }
 
-        // now for each used table .. just use it directly in an JOIN query
+        // now for each used table .. just use it directly in a JOIN query
+        // fixme: there is something sus here but I'm not sure ..
         for (auto& in: UnusedTables) {
             auto step = ExecutionStep();
             auto sub_input = FromResolver::ResolveResult();

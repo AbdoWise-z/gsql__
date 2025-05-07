@@ -99,7 +99,7 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
         }
 
         auto table_idx = FromResolver::find(input_data, table_name);
-        if (table_idx == -1 ||
+        if (table_idx < 0 ||
             std::find(
                 input_data->tables[table_idx]->headers.begin(),
                 input_data->tables[table_idx]->headers.end(),
@@ -203,7 +203,7 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
     }
 
     auto table_idx = FromResolver::find(input_data, table_name_l);
-    if (table_idx == -1 ||
+    if (table_idx < 0 ||
             std::find(
                 input_data->tables[table_idx]->headers.begin(),
                 input_data->tables[table_idx]->headers.end(),
@@ -218,7 +218,7 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
     auto column_ptr_l = table_ptr_l->columns[pos_l];
 
     table_idx = FromResolver::find(input_data, table_name_r);
-    if (table_idx == -1 ||
+    if (table_idx < 0 ||
             std::find(
                 input_data->tables[table_idx]->headers.begin(),
                 input_data->tables[table_idx]->headers.end(),

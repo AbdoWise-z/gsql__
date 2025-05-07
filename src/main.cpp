@@ -15,19 +15,17 @@
 #include "editor/NanoEditor.h"
 #include "query/cpu_executor.hpp"
 #include "query/gpu_executor.hpp"
+#include "query/cpu/from_resolver.hpp"
 #include "utils/string_utils.hpp"
 
 namespace fs = std::filesystem;
 
-
-
-
-
 void removeTable(std::vector<std::string> params) {
     for (auto name: params) {
-        if (global_tables.find(name) != global_tables.end()) {
-            delete global_tables[name];
-            global_tables.erase(name);
+        auto t = FromResolver::find_it(global_tables, name, false);
+        if (!t.empty()) {
+            delete global_tables[t];
+            global_tables.erase(t);
             std::cout << "Removed: " << color(name, GREEN_FG) << std::endl;
             return;
         } else {
@@ -38,10 +36,9 @@ void removeTable(std::vector<std::string> params) {
 
 void show_details(std::vector<std::string> params) {
     for (const auto& name: params) {
-        if (global_tables.contains(name)) {
-            auto table = global_tables[name];
-
-            std::cout << name << ": " << table::details(table) << std::endl;
+        auto t = FromResolver::find(global_tables, name, false);
+        if (t) {
+            std::cout << name << ": " << table::details(t) << std::endl;
         } else {
             std::cout << "Table [" << color(name, RED_FG) << "] not found" << std::endl;
         }
@@ -67,16 +64,17 @@ void load_table(std::vector<std::string> params) {
     if (params.size() == 2) {
         name = params[1];
     }
-
     name = name.substr(0, name.find_last_of('.'));
-    if (global_tables.find(name) != global_tables.end()) {
-        std::cout << "table with the same name already exists" << std::endl;
+
+    if (FromResolver::find(global_tables, name, false)) {
+        std::cout << "Table " << color(name, RED_FG) << " already exists." << std::endl;
         return;
     }
 
+
     try {
         table* t = time_it(DBHelper::fromCSV_Unchecked(p));
-        global_tables[name] = t;
+        global_tables[{name}] = t;
         std::cout << "Loaded: " << color(p, GREEN_FG) << ", as: " << color(name, YELLOW_FG) << std::endl;
         show_details({name});
     } catch (const std::exception& e) {
@@ -100,13 +98,15 @@ void save_table(std::vector<std::string> params) {
         return;
     }
 
-    if (global_tables.find(name) == global_tables.end()) {
-        std::cout << "no such table" << std::endl;
+    if (FromResolver::find(global_tables, name, false) == nullptr) {
+        std::cout << "Table " << color(name, RED_FG) << " not found." << std::endl;
         return;
     }
 
+
+    auto t = FromResolver::find(global_tables, name, false);
+
     try {
-        auto t = global_tables[name];
         DBHelper::toCSV(t, p);
         std::cout << "Saved: " << color(name, YELLOW_FG) << ", To: " << color(p, GREEN_FG) << std::endl;
     } catch (const std::exception& e) {
@@ -126,12 +126,12 @@ void show_table(std::vector<std::string> params) {
     // print the header
     std::vector<size_t> w;
 
-    if (!global_tables.contains(name)) {
+    if (FromResolver::find(global_tables, name, false) == nullptr) {
         std::cout << "Table " << color(name, RED_FG) << " not found." << std::endl;
         return;
     }
 
-    auto table = global_tables[name];
+    auto table = FromResolver::find(global_tables, name, false);
 
     auto count = table->size();
 
@@ -204,12 +204,12 @@ void hash_table(std::vector<std::string> params) {
 
     auto name = params[0];
 
-    if (!global_tables.contains(name)) {
+    if (FromResolver::find(global_tables, name, false) == nullptr) {
         std::cout << "Table " << color(name, RED_FG) << " not found." << std::endl;
         return;
     }
 
-    auto t = global_tables[name];
+    auto t = FromResolver::find(global_tables, name, false);
 
     if (params.size() < 2) {
         for (auto head: t->headers) {
@@ -248,12 +248,13 @@ void sort_table(std::vector<std::string> params) {
 
     auto name = params[0];
 
-    if (!global_tables.contains(name)) {
+    if (FromResolver::find(global_tables, name, false) == nullptr) {
         std::cout << "Table " << color(name, RED_FG) << " not found." << std::endl;
         return;
     }
 
-    auto t = global_tables[name];
+
+    auto t = FromResolver::find(global_tables, name, false);
 
     if (params.size() < 2) {
         for (auto head: t->headers) {
@@ -396,11 +397,11 @@ void sql(std::vector<std::string> params) {
             std::cout << table::details(t) << std::endl;
 
             int i = 0;
-            while (global_tables.contains("result_" + std::to_string(i))) {
+            while (FromResolver::find(global_tables, "result_" + std::to_string(i), false)) {
                 i++;
             }
 
-            global_tables["result_" + std::to_string(i)] = t;
+            global_tables[{"result_" + std::to_string(i)}] = t;
             std::cout << "Result saved on table: " << color("result_" + std::to_string(i), GREEN_FG) << std::endl;
             std::cout << "First 10 rows:" << std::endl;
             show_table({"result_" + std::to_string(i), "0", "10"});
@@ -412,11 +413,12 @@ void sql(std::vector<std::string> params) {
 
 void dummy(std::vector<std::string> params) {
     for (auto name: params) {
-        if (global_tables.find(name) != global_tables.end()) {
+
+        if (FromResolver::find(global_tables, name, false)) {
             std::cout << "[" << color(name,  RED_FG) <<  "] table with the same name already exists" << std::endl;
             continue;
         }
-        global_tables[name] = new table();
+        global_tables[{name}] = new table();
         std::cout << "Loaded: " << color("data/empty.csv", GREEN_FG) << ", as: " << color(name, YELLOW_FG) << std::endl;
     }
 }

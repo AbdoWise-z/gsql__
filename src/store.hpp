@@ -46,7 +46,7 @@
     } \
 })()
 
-typedef std::unordered_map<std::string, table*> TableMap;
+typedef std::map<std::set<std::string>, table*> TableMap;
 
 extern TableMap global_tables;
 
