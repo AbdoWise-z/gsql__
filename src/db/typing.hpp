@@ -19,10 +19,11 @@ inline std::string typeToString(DataType d) {
     if (d == STRING) return "str";
     if (d == INTEGER) return "int";
     if (d == FLOAT) return "float";
-    if (d == DateTime) return "dateTime";
+    if (d == DateTime) return "dt";
 
     return "idk"; // idk
                     // he doesn't know
+                    // they doesn't know
 }
 
 #endif //TYPING_HPP
