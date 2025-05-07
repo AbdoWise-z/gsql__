@@ -155,6 +155,14 @@ static std::vector<DataType> inferTypes(std::string row) {
 
     for (const auto& field: fields) {
         try {
+            auto dt_val = ValuesHelper::parseDateTime(field);
+            if (dt_val != std::nullopt) {
+                types.push_back(DateTime);
+                continue;
+            }
+        } catch (...) {}
+
+        try {
             if (field.find(".") == field.npos) {
                 auto int_val = std::stoll(field);
                 types.push_back(INTEGER);
@@ -166,14 +174,6 @@ static std::vector<DataType> inferTypes(std::string row) {
             auto double_val = std::stod(field);
             types.push_back(FLOAT);
             continue;
-        } catch (...) {}
-
-        try {
-            auto dt_val = ValuesHelper::parseDateTime(field);
-            if (dt_val != std::nullopt) {
-                types.push_back(DateTime);
-                continue;
-            }
         } catch (...) {}
 
         types.push_back(STRING);

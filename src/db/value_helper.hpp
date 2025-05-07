@@ -110,7 +110,7 @@ namespace ValuesHelper {
                     case INTEGER:
                         return create_from(static_cast<int64_t>(in.i));
                     case FLOAT:
-                        return create_from(static_cast<int64_t>(in.i));
+                        return create_from(static_cast<double>(in.i));
                     case DateTime:
                         return create_from(dateTimeFromInt(in.i));
                     case STRING:
