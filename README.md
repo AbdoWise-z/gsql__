@@ -1,6 +1,6 @@
 # gsql++
 
-**gsql++** is a modern C++ dmbs designed to provide a lightweight SQL-like query interface for in-memory data structures. Built with modularity and performance in mind using GPU for acceleration, it uses CMake for configuration and build management.
+**gsql++** is a modern C++ dbms designed to provide a lightweight SQL-like query interface for in-memory data structures. Built with modularity and performance in mind using GPU for acceleration, it uses CMake for configuration and build management.
 
 ## Features
 
