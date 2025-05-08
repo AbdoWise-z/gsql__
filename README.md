@@ -1,3 +1,12 @@
+## Team
+| name                             | id      | bn | sec |
+|----------------------------------|---------|----|-----|
+| Abdulrahman Mohammed Abdelfattah | 9210587 | 23 | 1   |
+| Abdulrahman Mohammed Hefney      | 9210587 | 22 | 1   |
+| Osama Saleh Farag                | 9210195 | 12 | 1   |
+| Amr Salah Eldin                  | 9210774 | 30 | 1   |
+
+
 # gsql++
 
 **gsql++** is a modern C++ dbms designed to provide a lightweight SQL-like query interface for in-memory data structures. Built with modularity and performance in mind using GPU for acceleration, it uses CMake for configuration and build management.
