@@ -125,8 +125,16 @@ column* column::copy() const {
     return result;
 }
 
+namespace GFI {
+    void clearCache(void* col);
+}
+
+
+
 column::~column() {
     for (const auto i: data) {
         ValuesHelper::deleteValue(i, type);
     }
+
+    GFI::clearCache(this); // clear any column cache in the gpu
 }

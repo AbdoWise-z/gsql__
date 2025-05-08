@@ -108,7 +108,7 @@ namespace QueryOptimizer {
 
     // Main recursive splitter: given any `where`, produce a list of steps
     // whose whereExpr is at most a binary-join predicate or conjunction thereof.
-    void SegmentExpression_recv(hsql::Expr*                         where,
+    void SegmentExpression_recv(  hsql::Expr*                         where,
                                   std::vector<hsql::Expr*>&         result) {
         if (!where) return;
 
@@ -211,29 +211,13 @@ namespace QueryOptimizer {
         hsql::Expr* where) {
         auto req = getRequiredTables(r, where);
 
-        // std::unordered_map<table*, std::set<std::string>> inverse_tables;
-        // for (const auto i: req) {
-        //     const auto table_ptr = r.tables[FromResolver::GPU::find(&r, i)];
-        //     if (!inverse_tables.contains(table_ptr)) {
-        //         inverse_tables[table_ptr] = std::set<std::string>();
-        //     }
-        //
-        //     inverse_tables[table_ptr].insert(i);
-        // }
-        //
-        // FromResolver::ResolveResult result;
-        // for (const auto& [k, v] : inverse_tables) {
-        //     result.table_names.push_back(v);
-        //     result.tables.push_back(k);
-        // }
-
         FromResolver::ResolveResult result;
         for (const auto& i : req) {
             auto idx = FromResolver::find(&r, i);
             if (idx < 0) {
                 throw NoSuchTableError(i);
             }
-            result.table_names.push_back({i});
+            result.table_names.push_back(r.table_names[idx]);
             result.tables.push_back(r.tables[idx]);
             result.isTemporary.push_back(false);
         }
@@ -245,9 +229,6 @@ namespace QueryOptimizer {
 
         auto sub_wheres = SegmentExpression(query->whereClause);
 
-        // for (auto where: sub_wheres) {
-        //     std::cout << exprToString(where) << std::endl;
-        // }
         std::vector<ExecutionStep> steps;
 
         for (auto where: sub_wheres) {
@@ -263,14 +244,16 @@ namespace QueryOptimizer {
         std::vector<ExecutionStep> final_steps;
         for (auto& step: steps) {
 
-            if (expr) {
-                auto old = expr;
-                expr = new hsql::Expr(hsql::kExprOperator);
-                expr->opType = hsql::kOpAnd;
-                expr->expr = old;
-                expr->expr2 = step.query;
-            } else {
-                expr = step.query;
+            if (step.input.tables.empty()) { // empty input with a where cond
+                if (expr) {
+                    auto old = expr;
+                    expr = new hsql::Expr(hsql::kExprOperator);
+                    expr->opType = hsql::kOpAnd;
+                    expr->expr = old;
+                    expr->expr2 = step.query;
+                } else {
+                    expr = step.query;
+                }
             }
 
             if (!step.input.tables.empty()) { // only consider steps that has inputs
@@ -284,9 +267,23 @@ namespace QueryOptimizer {
             for (auto& tables: step.input.table_names) {
                 for (auto& t_name: tables) {
                     auto idx = FromResolver::find(UnusedTables, t_name);
-                    if (idx > 0) {
+                    if (idx >= 0) {
                         UnusedTables.erase(UnusedTables.begin() + idx);
                     }
+                }
+            }
+        }
+
+        if (expr) {
+            for (auto& in : final_steps) {
+                auto old = in.query;
+                if (old == nullptr) {
+                    in.query = expr;
+                } else {
+                    in.query = new hsql::Expr(hsql::kExprOperator);
+                    in.query->opType = hsql::kOpAnd;
+                    in.query->expr = old;
+                    in.query->expr2 = expr;
                 }
             }
         }

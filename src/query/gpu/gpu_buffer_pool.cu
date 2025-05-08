@@ -5,6 +5,7 @@
 #include "gpu_buffer_pool.cuh"
 
 #include <cuda_runtime.h>
+#include <iostream>
 #include <list>
 #include <unordered_map>
 #include <stdexcept>

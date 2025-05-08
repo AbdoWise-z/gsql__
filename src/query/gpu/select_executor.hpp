@@ -19,7 +19,7 @@ namespace SelectExecutor::GPU {
         std::vector<std::set<std::string>> col_source;
     };
 
-    std::pair<std::set<std::string>, table*> Execute(hsql::SQLStatement* statement, TableMap& tables);
+    std::pair<std::set<std::string>, table*> Execute(hsql::SQLStatement* statement, TableMap& tables, FromResolver::ResolveResult injected = {});
 
     ConstructionResult ConstructTable(
        tensor<char, Device::GPU>* intermediate,

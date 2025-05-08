@@ -110,7 +110,7 @@ namespace FromResolver {
             // we need to check for dubs
             for (auto name: names) {
                 auto k = find(&result, name);
-                if (k != -1) {
+                if (k != -1) { // fixme: idk how to fix him :")
                     throw std::runtime_error("Duplicate table name: " + name);
                 }
             }

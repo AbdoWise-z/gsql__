@@ -30,6 +30,20 @@ tval Agg::GPU::sum(column *col) {
     // }
     //
     // return ValuesHelper::create_from("ERROR IN AGG SUM");
+
+    if (col->data.size() == 0) {
+        switch (col->type) {
+            case STRING:
+                return ValuesHelper::create_from("");
+            case INTEGER:
+                return ValuesHelper::create_from(static_cast<int64_t>(0));
+            case FLOAT:
+                return ValuesHelper::create_from(static_cast<double>(0));
+            case DateTime:
+                return ValuesHelper::create_from(dateTime{});
+        }
+    }
+
     return GFI::sum(col);
 }
 
@@ -60,6 +74,20 @@ tval Agg::GPU::avg(column *col) {
     // }
     //
     // return ValuesHelper::create_from("ERROR IN AGG SUM");
+
+    if (col->data.size() == 0) {
+        switch (col->type) {
+            case STRING:
+                return ValuesHelper::create_from("");
+            case INTEGER:
+                return ValuesHelper::create_from(static_cast<int64_t>(0));
+            case FLOAT:
+                return ValuesHelper::create_from(static_cast<double>(0));
+            case DateTime:
+                return ValuesHelper::create_from(dateTime{});
+        }
+    }
+
     return GFI::avg(col);
 }
 

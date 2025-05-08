@@ -35,6 +35,18 @@ tval Agg::GPU::max(column *col) {
     //     return ValuesHelper::create_from(_max);
     // }
 
+    if (col->data.size() == 0) {
+        switch (col->type) {
+            case STRING:
+                return ValuesHelper::create_from("");
+            case INTEGER:
+                return ValuesHelper::create_from(static_cast<int64_t>(0));
+            case FLOAT:
+                return ValuesHelper::create_from(static_cast<double>(0));
+            case DateTime:
+                return ValuesHelper::create_from(dateTime{});
+        }
+    }
     return GFI::max(col);
 
     // return ValuesHelper::create_from("ERROR IN AGG MAX");
@@ -83,6 +95,19 @@ tval Agg::GPU::min(column *col) {
 //     }
 //
 //     return ValuesHelper::create_from("ERROR IN AGG MIN");
+
+    if (col->data.size() == 0) {
+        switch (col->type) {
+            case STRING:
+                return ValuesHelper::create_from("");
+            case INTEGER:
+                return ValuesHelper::create_from(static_cast<int64_t>(0));
+            case FLOAT:
+                return ValuesHelper::create_from(static_cast<double>(0));
+            case DateTime:
+                return ValuesHelper::create_from(dateTime{});
+        }
+    }
 
     return GFI::min(col);
 }

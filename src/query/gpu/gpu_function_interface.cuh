@@ -121,7 +121,9 @@ namespace GFI {
 
     std::vector<unsigned long long int> sort(column *col_1);
 
-};
+    void clearCache(void* col);
+
+}
 
 
 

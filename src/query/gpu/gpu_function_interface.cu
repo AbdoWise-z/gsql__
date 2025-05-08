@@ -202,7 +202,7 @@ void GFI::equality(
     ) {
 
     if (col_1->type != col_2->type) {
-        throw std::runtime_error("Column types must be same");
+        throw std::runtime_error("Column types must be the same");
     }
 
     auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
@@ -400,6 +400,7 @@ void GFI::equality(
         }
     }
     CUDA_CHECK_LAST_ERROR("EqualityKernel::equality_kernel");
+    CUDA_CHECK(cudaDeviceSynchronize());
 
     const auto size = result->totalSize();
     dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
@@ -504,6 +505,7 @@ void GFI::equality(tensor<char, Device::GPU> *result, column *col_1, tval value,
 
     }
     CUDA_CHECK_LAST_ERROR("EqualityKernel::equality_kernel");
+    CUDA_CHECK(cudaDeviceSynchronize());
 
     const auto size = result->totalSize();
     dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
@@ -553,6 +555,7 @@ void GFI::equality_date(tensor<char, Device::GPU> *result, column *col_1, tval v
 
     }
     CUDA_CHECK_LAST_ERROR("EqualityKernel::equality_kernel");
+    CUDA_CHECK(cudaDeviceSynchronize());
 
     const auto size = result->totalSize();
     dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
@@ -601,6 +604,7 @@ void GFI::equality_time(tensor<char, Device::GPU> *result, column *col_1, tval v
 
     }
     CUDA_CHECK_LAST_ERROR("EqualityKernel::equality_kernel");
+    CUDA_CHECK(cudaDeviceSynchronize());
 
     const auto size = result->totalSize();
     dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
@@ -833,6 +837,7 @@ void GFI::inequality(
         }
     }
     CUDA_CHECK_LAST_ERROR("EqualityKernel::equality_kernel");
+    CUDA_CHECK(cudaDeviceSynchronize());
 
     const auto size = result->totalSize();
     dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
@@ -941,6 +946,7 @@ void GFI::inequality(tensor<char, Device::GPU> *result, column *col_1, tval valu
     }
 
     CUDA_CHECK_LAST_ERROR("EqualityKernel::equality_kernel");
+    CUDA_CHECK(cudaDeviceSynchronize());
 
     const auto size = result->totalSize();
     dim3 grid((size + Cfg::BlockDim - 1) / (Cfg::BlockDim));
@@ -1013,6 +1019,7 @@ tval GFI::max(column *col_1) {
         default:
             throw std::runtime_error("Unsupported column type");
     }
+    CUDA_CHECK(cudaDeviceSynchronize());
 
     cu::free(devSizePtr);
     free(hostSizePtr);
@@ -1022,7 +1029,7 @@ tval GFI::max(column *col_1) {
 
 tval GFI::min(column *col_1) {
     auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
-    CUDA_CHECK_LAST_ERROR("GFI::equality pool.getBufferOrCreate columnPoolAllocator");
+    CUDA_CHECK_LAST_ERROR("GFI::min pool.getBufferOrCreate columnPoolAllocator");
 
     const char* devPtr = nullptr;
 
@@ -1055,6 +1062,7 @@ tval GFI::min(column *col_1) {
             throw std::runtime_error("Unsupported column type");
     }
 
+    CUDA_CHECK(cudaDeviceSynchronize());
     cu::free(devSizePtr);
     free(hostSizePtr);
     free(hostPtr);
@@ -1065,8 +1073,9 @@ tval GFI::sum(column *col_1) {
     if (col_1->type == STRING) throw std::runtime_error("Unsupported column type");
 
     auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
-    CUDA_CHECK_LAST_ERROR("GFI::equality pool.getBufferOrCreate columnPoolAllocator");
+    CUDA_CHECK_LAST_ERROR("GFI::sum pool.getBufferOrCreate columnPoolAllocator");
 
+    CUDA_CHECK(cudaDeviceSynchronize());
     tval result;
     switch (col_1->type) {
         case INTEGER:
@@ -1081,7 +1090,7 @@ tval GFI::sum(column *col_1) {
         default:
             throw std::runtime_error("Unsupported column type");
     }
-
+    CUDA_CHECK(cudaDeviceSynchronize());
     return result;
 }
 
@@ -1120,6 +1129,7 @@ void GFI::logical_and(const tensor<char, Device::GPU> *a, const tensor<char, Dev
         size,
         out->data
     );
+    CUDA_CHECK(cudaDeviceSynchronize());
 
     CUDA_CHECK_LAST_ERROR("TensorKernel::logical_and");
 }
@@ -1134,7 +1144,7 @@ void GFI::logical_or(const tensor<char, Device::GPU> *a, const tensor<char, Devi
         size,
         out->data
     );
-
+    CUDA_CHECK(cudaDeviceSynchronize());
     CUDA_CHECK_LAST_ERROR("TensorKernel::logical_or");
 }
 
@@ -1147,7 +1157,7 @@ void GFI::logical_not(const tensor<char, Device::GPU> *a, tensor<char, Device::G
         size,
         out->data
     );
-
+    CUDA_CHECK(cudaDeviceSynchronize());
     CUDA_CHECK_LAST_ERROR("TensorKernel::logical_not");
 }
 
@@ -1278,6 +1288,7 @@ std::vector<size_t> GFI::iterator(tensor<char, Device::GPU> *a) {
     auto out = static_cast<size_t*>(cu::malloc(sizeof(size_t) * size));
 
     run_prefix_sum(a->data, out, size);
+    CUDA_CHECK(cudaDeviceSynchronize());
 
     auto cpu_out = static_cast<size_t*>(malloc(sizeof(size_t) * size));
 
@@ -1406,6 +1417,8 @@ static std::vector<index_t> sort_int64_t(column* col_1) {
         CUDA_CHECK_LAST_ERROR("GFI::sort OrderBy::radix_scatter_pass<<<grid, Cfg::BlockDim>>>");
         // cu::toHost(indices_out, result.data(), sizeof(index_t) * size);
         // CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
+
+        CUDA_CHECK(cudaDeviceSynchronize());
 
         auto temp = indices_in;
         indices_in = indices_out;
@@ -1672,6 +1685,8 @@ static std::vector<index_t> sort_double_t(column* col_1) {
         CUDA_CHECK_LAST_ERROR("GFI::sort OrderBy::radix_scatter_pass<<<grid, Cfg::BlockDim>>>");
         // cu::toHost(indices_out, result.data(), sizeof(index_t) * size);
         // CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
+
+        CUDA_CHECK(cudaDeviceSynchronize());
 
         auto temp = indices_in;
         indices_in = indices_out;
@@ -1942,6 +1957,8 @@ static std::vector<index_t> sort_dt_t(column* col_1) {
         CUDA_CHECK_LAST_ERROR("GFI::sort OrderBy::radix_scatter_pass<<<grid, Cfg::BlockDim>>>");
         // cu::toHost(indices_out, result.data(), sizeof(index_t) * size);
         // CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
+
+        CUDA_CHECK(cudaDeviceSynchronize());
 
         auto temp = indices_in;
         indices_in = indices_out;
@@ -2218,6 +2235,7 @@ static std::vector<index_t> sort_string_t(column* col) {
         CUDA_CHECK_LAST_ERROR("GFI::sort OrderBy::radix_scatter_pass<<<grid, Cfg::BlockDim>>>");
         // cu::toHost(indices_out, result.data(), sizeof(index_t) * size);
         // CUDA_CHECK_LAST_ERROR("GFI::sort CPU Copy");
+        CUDA_CHECK(cudaDeviceSynchronize());
 
         auto temp = indices_in;
         indices_in = indices_out;
@@ -2424,4 +2442,10 @@ std::vector<index_t> GFI::sort(column *col_1) {
     }
 
     throw UnsupportedOperationError("Sort failed, unknown col type.");
+}
+
+void GFI::clearCache(void *col) {
+    CUDA_CHECK(cudaDeviceSynchronize());
+    pool.releaseBuffer(col);
+    CUDA_CHECK(cudaDeviceSynchronize());
 }
