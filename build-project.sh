@@ -3,6 +3,18 @@
 # Exit on error
 set -e
 
+LINE='export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH'
+
+# Check if the line already exists
+if ! grep -Fxq "$LINE" ~/.bashrc; then
+    echo "$LINE" >> ~/.bashrc
+    echo "Added LD_LIBRARY_PATH to ~/.bashrc"
+else
+    echo "LD_LIBRARY_PATH already set in ~/.bashrc"
+fi
+
+source ~/.bashrc
+
 # Go to the directory of the script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
