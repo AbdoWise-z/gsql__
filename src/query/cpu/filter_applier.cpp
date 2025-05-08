@@ -8,6 +8,7 @@
 #include "ops/greater_than.hpp"
 #include "ops/logical_and.hpp"
 #include "ops/logical_or.hpp"
+#include "ops/null_equality.hpp"
 #include "query/errors.hpp"
 
 // #define FILTER_DEBUG
@@ -92,33 +93,33 @@ tensor<char, Device::CPU>* FilterApplier::CPU::apply(
             return result;
         }
 
-        throw UnsupportedOperatorError(std::to_string(op));
-    } else if (expr_type == hsql::ExprType::kExprLiteralString) {
-#ifdef FILTER_DEBUG
-        std::cout << "hsql::ExprType::kExprLiteralString" << std::endl;
-#endif
+        if (op == hsql::kOpIsNull) {
+            return Ops::CPU::null_equality(input_data, eval, limit, tile_start, tile_size);
+        }
+
+        if (op == hsql::kOpNot) {
+            auto t2 = apply(input_data, eval->expr, limit, tile_start, tile_size);
+            auto result = new tensor<char, Device::CPU>(!*t2);
+            delete t2;
+            return result;
+        }
 
         auto* result = new tensor<char, Device::CPU>(result_size);
-        result->setAll(strlen(eval->name) > 0 ? 1 : 0);
-        return result;
-    } else if (expr_type == hsql::ExprType::kExprLiteralInt) {
-#ifdef FILTER_DEBUG
-        std::cout << "hsql::ExprType::kExprLiteralInt" << std::endl;
-#endif
+        auto literal = ValuesHelper::getLiteralFrom(eval);
 
-        auto* result = new tensor<char, Device::CPU>(result_size);
-        result->setAll(eval->ival > 0 ? 1 : 0);
-        return result;
-    } else if (expr_type == hsql::ExprType::kExprLiteralFloat) {
-#ifdef FILTER_DEBUG
-        std::cout << "hsql::ExprType::kExprLiteralFloat" << std::endl;
-#endif
-
-        auto* result = new tensor<char, Device::CPU>(result_size);
-        result->setAll(eval->fval > 0 ? 1 : 0);
+        result->setAll(ValuesHelper::isZero(literal.first, literal.second) ? 0 : 1);
+        ValuesHelper::deleteValue(literal.first, literal.second);
         return result;
     } else {
-        throw UnsupportedOperatorError(eval->getName());
+#ifdef FILTER_DEBUG
+        std::cout << "hsql::ExprType::kLiteral" << std::endl;
+#endif
+
+        auto* result = new tensor<char, Device::CPU>(result_size);
+        auto literal = ValuesHelper::getLiteralFrom(eval);
+
+        result->setAll(ValuesHelper::isZero(literal.first, literal.second) ? 0 : 1);
+        ValuesHelper::deleteValue(literal.first, literal.second);
+        return result;
     }
-    return nullptr;
 }

@@ -559,7 +559,7 @@ SelectExecutor::GPU::ConstructionResult SelectExecutor::GPU::ConstructTable(
                 auto val = t->columns[k]->data[tuple_index[m]];
                 result->columns[j]->data.push_back(ValuesHelper::copy(val, t->columns[k]->type));
                 result->columns[j]->nulls.push_back(t->columns[k]->nulls[tuple_index[m]]);
-                if (t->columns[k]->nulls[tuple_index[m]]) {
+                if ( t->columns[k]->nulls[tuple_index[m]]) {
                     result->columns[j]->nullsCount++;
                 }
                 j++;
@@ -606,7 +606,7 @@ void SelectExecutor::GPU::AppendTable(
                 auto val = t->columns[k]->data[pos[m]];
                 result->columns[j]->data.push_back(ValuesHelper::copy(val, t->columns[k]->type));
                 result->columns[j]->nulls.push_back(t->columns[k]->nulls[pos[m]]);
-                if (t->columns[k]->nulls[pos[m]]) {
+                if ( t->columns[k]->nulls[pos[m]]) {
                     result->columns[j]->nullsCount++;
                 }
                 j++;

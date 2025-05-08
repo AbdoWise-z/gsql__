@@ -170,6 +170,7 @@ tensor<char, Device::CPU> * Ops::CPU::greater_than(
             }
 
             for (size_t i = result_offset[table_index]; i < result_offset[table_index] + result_size[table_index]; i++) {
+                if (column_ptr->nulls[i]) continue;
                 const auto& val = column_ptr->data[i];
                 if (
                     (ValuesHelper::cmp(value, val , column_ptr->type) > 0 &&  literal_on_left) ||
@@ -296,6 +297,7 @@ tensor<char, Device::CPU> * Ops::CPU::greater_than(
     }
 
     for (int i = result_offset[other_index];i < result_offset[other_index] + result_size[other_index];i++) {
+        if (other->nulls[i]) continue;
         auto matches = sorted->sortSearch(other->data[i], other_index == table_index_l ? column::SST_LT : column::SST_GT);
         hyperplane_pos[other_index] = i - result_offset[other_index];
         for (auto match: matches) {

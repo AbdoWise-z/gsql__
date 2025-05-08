@@ -1202,7 +1202,7 @@ tval GFI::avg(column *col_1) {
     auto _s = sum(col_1);
     switch (col_1->type) {
         case INTEGER:
-            _s.d = static_cast<float>(_s.i) / (col_1->data.size() - col_1->nullsCount);
+            _s.d = static_cast<double>(_s.i) / (col_1->data.size() - col_1->nullsCount);
             break;
         case FLOAT:
             _s.d = _s.d / (col_1->data.size() - col_1->nullsCount);

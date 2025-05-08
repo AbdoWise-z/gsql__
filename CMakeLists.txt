@@ -101,6 +101,9 @@ set(SOURCES
         src/query/cpu/ops/equality.cpp
         src/query/cpu/ops/equality.hpp
 
+        src/query/cpu/ops/null_equality.cpp
+        src/query/cpu/ops/null_equality.hpp
+
         src/query/cpu/ops/logical_and.cpp
         src/query/cpu/ops/logical_and.hpp
         src/query/cpu/ops/logical_or.cpp

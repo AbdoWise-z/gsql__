@@ -8,61 +8,63 @@
 #include "db/table.hpp"
 
 tval Agg::CPU::sum(column *col) {
-    if (col->type == STRING)
-        throw UnsupportedOperationError("Cannot aggregate (sum) over a string column");
-
-    if (col->type == INTEGER) {
-        int64_t sum = 0;
-        for (auto item: col->data) {
-            sum += item.i;
+    auto size = col->data.size() - col->nullsCount;
+    if (size == 0) {
+        switch (col->type) {
+            case STRING:
+                return ValuesHelper::create_from("");
+            case INTEGER:
+                return ValuesHelper::create_from(static_cast<int64_t>(0));
+            case FLOAT:
+                return ValuesHelper::create_from(static_cast<double>(0));
+            case DateTime:
+                return ValuesHelper::create_from(dateTime{});
         }
-
-        return ValuesHelper::create_from(sum);
     }
 
-    if (col->type == FLOAT) {
-        double sum = 0.0;
-        for (auto item: col->data) {
-            sum += item.d;
-        }
+    tval _sum = ValuesHelper::copy(col->data[0], col->type);
+    for (size_t i = 1;i < col->data.size(); ++i) {
+        auto item =  col->data[i];
+        auto nil = col->nulls[i];
+        if (nil) continue;
 
-        return ValuesHelper::create_from(sum);
+        auto old = _sum;
+        _sum = ValuesHelper::add(old, item, col->type);
+        ValuesHelper::deleteValue(old, col->type);
     }
 
-    return ValuesHelper::create_from("ERROR IN AGG SUM");
+    auto ret = ValuesHelper::copy(_sum, col->type);
+    ValuesHelper::deleteValue(_sum, col->type);
+    return ret;
 }
 
 tval Agg::CPU::avg(column *col) {
-    if (col->type == STRING)
-        throw UnsupportedOperationError("Cannot aggregate (avg) over a string column");
+    auto _sum = sum(col);
+    auto size = col->data.size() - col->nullsCount;
 
-    if (col->data.empty()) {
-        return ValuesHelper::create_from("Inf");
+    switch (col->type) {
+        case STRING:
+            throw UnsupportedOperationError("Cannot aggregate (avg) over a string column");
+        case INTEGER:
+            _sum.d = static_cast<double>(_sum.i) / size;
+            break;
+        case FLOAT:
+            _sum.d = ((double) _sum.d) / size;
+            break;
+        case DateTime:
+            _sum.t->day    = _sum.t->day      / (size);
+            _sum.t->month  = _sum.t->month    / (size);
+            _sum.t->year   = _sum.t->year     / (size);
+            _sum.t->hour   = _sum.t->hour     / (size);
+            _sum.t->minute = _sum.t->minute   / (size);
+            _sum.t->second = _sum.t->second   / (size);
+            break;
     }
-
-    if (col->type == INTEGER) {
-        double sum = 0;
-        for (auto item: col->data) {
-            sum += item.i;
-        }
-
-        return ValuesHelper::create_from(sum / col->data.size());
-    }
-
-    if (col->type == FLOAT) {
-        double sum = 0.0;
-        for (auto item: col->data) {
-            sum += item.d;
-        }
-
-        return ValuesHelper::create_from(sum / col->data.size());
-    }
-
-    return ValuesHelper::create_from("ERROR IN AGG SUM");
+    return _sum;
 }
 
 tval Agg::CPU::count(const column *col) {
-    return ValuesHelper::create_from(static_cast<int64_t>(col->data.size()));
+    return ValuesHelper::create_from(static_cast<int64_t>(col->data.size() - col->nullsCount));
 }
 
 tval Agg::CPU::count(const table *t) {

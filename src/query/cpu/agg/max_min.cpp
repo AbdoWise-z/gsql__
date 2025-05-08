@@ -9,75 +9,79 @@
 //#define MAX_MIN_DEBUG
 
 tval Agg::CPU::max(column *col) {
-    if (col->type == STRING)
-        throw UnsupportedOperationError("Cannot aggregate (max) over a string column");
-
-    if (col->type == INTEGER) {
-        if (col->isSortIndexed()) return ValuesHelper::create_from(col->data[col->sorted.back()].i);
-
-        int64_t _max = std::numeric_limits<int64_t>::min();
-        for (auto item: col->data) {
-            _max = _max > item.i ? _max : item.i;
+    auto size = col->data.size() - col->nullsCount;
+    if (size == 0) {
+        switch (col->type) {
+            case STRING:
+                return ValuesHelper::create_from("");
+            case INTEGER:
+                return ValuesHelper::create_from(static_cast<int64_t>(0));
+            case FLOAT:
+                return ValuesHelper::create_from(static_cast<double>(0));
+            case DateTime:
+                return ValuesHelper::create_from(dateTime{});
         }
-
-        return ValuesHelper::create_from(_max);
     }
 
-    if (col->type == FLOAT) {
-        if (col->isSortIndexed()) return ValuesHelper::create_from(col->data[col->sorted.back()].d);
-
-        double _max = std::numeric_limits<double>::min();
-        for (auto item: col->data) {
-            _max = _max > item.d ? _max : item.d;
+    if (col->isSortIndexed()) {
+        for (size_t i = 0;i < col->sorted.size(); ++i) {
+            if (!col->nulls[col->sorted[i]]) {
+                return ValuesHelper::copy(col->data[col->sorted[i]], col->type);
+            }
         }
 
-        return ValuesHelper::create_from(_max);
-    }
+        throw std::runtime_error("__should__never__happen__");
+    } else {
+        tval _max = col->data[0];
+        for (size_t i = 1;i < col->data.size(); ++i) {
+            auto item = col->data[i];
+            auto nil = col->nulls[i];
+            if (nil) continue;
 
-    return ValuesHelper::create_from("ERROR IN AGG MAX");
+            if (ValuesHelper::cmp(_max, item, col->type) < 0) {
+                _max = item;
+            }
+        }
+
+        return ValuesHelper::copy(_max, col->type);
+    }
 }
 
 tval Agg::CPU::min(column *col) {
-    if (col->type == STRING)
-        throw UnsupportedOperationError("Cannot aggregate (min) over a string column");
-
-    if (col->type == INTEGER) {
-
-        if (col->isSortIndexed()) {
-#ifdef MAX_MIN_DEBUG
-            std::cout << "Agg::min result=" << col->data[col->sorted[0]].i << " (index)" << std::endl;
-#endif
-            return ValuesHelper::create_from(col->data[col->sorted[0]].i);
+    auto size = col->data.size() - col->nullsCount;
+    if (size == 0) {
+        switch (col->type) {
+            case STRING:
+                return ValuesHelper::create_from("");
+            case INTEGER:
+                return ValuesHelper::create_from(static_cast<int64_t>(0));
+            case FLOAT:
+                return ValuesHelper::create_from(static_cast<double>(0));
+            case DateTime:
+                return ValuesHelper::create_from(dateTime{});
         }
-
-        int64_t _min = std::numeric_limits<int64_t>::max();
-        for (auto item: col->data) {
-            _min = _min < item.i ? _min : item.i;
-        }
-#ifdef MAX_MIN_DEBUG
-        std::cout << "Agg::min result=" << _min << std::endl;
-#endif
-        return ValuesHelper::create_from(_min);
     }
 
-    if (col->type == FLOAT) {
-        if (col->isSortIndexed()) {
-#ifdef MAX_MIN_DEBUG
-            std::cout << "Agg::min result=" << col->data[col->sorted[0]].d << " (index)" << std::endl;
-#endif
-            return ValuesHelper::create_from(col->data[col->sorted[0]].d);
+    if (col->isSortIndexed()) {
+        for (int i = col->sorted.size() - 1;i >= 0; --i) {
+            if (!col->nulls[col->sorted[i]]) {
+                return ValuesHelper::copy(col->data[col->sorted[i]], col->type);
+            }
         }
 
-        double _min = std::numeric_limits<double>::max();
-        for (auto item: col->data) {
-            _min = _min < item.d ? _min : item.d;
+        throw std::runtime_error("__should__never__happen__");
+    } else {
+        tval _min = col->data[0];
+        for (size_t i = 1;i < col->data.size(); ++i) {
+            auto item = col->data[i];
+            auto nil = col->nulls[i];
+            if (nil) continue;
+
+            if (ValuesHelper::cmp(_min, item, col->type) > 0) {
+                _min = item;
+            }
         }
 
-#ifdef MAX_MIN_DEBUG
-        std::cout << "Agg::min result=" << _min << std::endl;
-#endif
-        return ValuesHelper::create_from(_min);
+        return ValuesHelper::copy(_min, col->type);
     }
-
-    return ValuesHelper::create_from("ERROR IN AGG MIN");
 }

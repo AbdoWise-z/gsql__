@@ -112,7 +112,14 @@ std::vector<size_t> column::sortSearch(tval v, SortedSearchType t) const {
             break;
     }
 
-    return result;
+    std::vector<size_t> ret;
+    for (auto& i : result) {
+        if (!nulls[i]) {
+            ret.push_back(i);
+        }
+    }
+
+    return ret;
 }
 
 bool column::isSortIndexed() const {
