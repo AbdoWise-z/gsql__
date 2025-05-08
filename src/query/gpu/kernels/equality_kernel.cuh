@@ -80,7 +80,7 @@ namespace EqualityKernel {
     }
 
 
-    //fixme: in-consistency with normal search, we don't hash null values, so value pairs with <null, null> will never happen in hash search ..
+    // fixme: in-consistency with normal search, we don't hash null values, so value pairs with <null, null> will never happen in hash search ..
     /// ===========================
     /// Hash Accelerated Kernels, null support
     /// ===========================
