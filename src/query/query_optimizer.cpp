@@ -289,7 +289,6 @@ namespace QueryOptimizer {
         }
 
         // now for each used table .. just use it directly in a JOIN query
-        // fixme: there is something sus here but I'm not sure ..
         for (auto& in: UnusedTables) {
             auto step = ExecutionStep();
             auto sub_input = FromResolver::ResolveResult();
