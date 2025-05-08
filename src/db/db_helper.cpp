@@ -237,7 +237,7 @@ table * DBHelper::fromCSV_Unchecked(const std::string& path) {
         int sampleIdx = 0;
         std::vector<std::vector<int>> votes = std::vector<std::vector<int>>(types.size(), std::vector<int>(4, 0));
         while (sampleIdx < 20) {
-            auto l = lines[random() % lines.size() + 1];
+            auto l = lines[random() % (lines.size() - 1) + 1];
             auto _t = inferTypes(l);
             if (_t.size() == types.size()) {
                 for (size_t i = 0; i < types.size(); ++i) {
