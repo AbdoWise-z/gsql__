@@ -31,7 +31,8 @@ tval Agg::GPU::sum(column *col) {
     //
     // return ValuesHelper::create_from("ERROR IN AGG SUM");
 
-    if (col->data.size() == 0) {
+    auto size = col->data.size() - col->nullsCount;
+    if (size == 0) {
         switch (col->type) {
             case STRING:
                 return ValuesHelper::create_from("");

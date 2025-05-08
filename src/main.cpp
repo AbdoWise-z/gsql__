@@ -498,7 +498,9 @@ int main(int argc, char** argv) {
         r_vec = time_it(GPUExecutor::executeQuery(parser_result, global_tables));
 
         if (r_vec.size() > 1) {
+            for (size_t i = 0; i < r_vec.size(); i++) {
 
+            }
         } else {
             auto output_path = data_folder / fs::path("team6.csv");
             global_tables[{"__team_6__query_result__"}] = r_vec[0];

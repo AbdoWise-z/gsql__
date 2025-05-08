@@ -98,7 +98,7 @@ tval Agg::GPU::min(column *col) {
 //     return ValuesHelper::create_from("ERROR IN AGG MIN");
 
     auto size = col->data.size() - col->nullsCount;
-    if (size) {
+    if (size == 0) {
         switch (col->type) {
             case STRING:
                 return ValuesHelper::create_from("");
