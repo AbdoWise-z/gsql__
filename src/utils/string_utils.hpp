@@ -36,6 +36,14 @@ namespace StringUtils {
                 return std::tolower(x) == std::tolower(y);
         });
     }
+
+    inline std::string trim(const std::string& s) {
+        auto start = s.find_first_not_of(" \t\r\n");
+        if (start == std::string::npos) return ""; // all whitespace
+
+        auto end = s.find_last_not_of(" \t\r\n");
+        return s.substr(start, end - start + 1);
+    }
 }
 
 

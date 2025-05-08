@@ -62,6 +62,9 @@ set(SOURCES
         src/query/errors.cpp
         src/query/errors.hpp
 
+        src/query/resolver.cpp
+        src/query/resolver.hpp
+
         src/store.cpp
         src/store.hpp
 
@@ -70,6 +73,21 @@ set(SOURCES
 
         src/editor/NanoEditor.cpp
         src/editor/NanoEditor.h
+
+        src/query/query_optimizer.cpp
+        src/query/query_optimizer.hpp
+
+        src/query/query_optimizer.cpp
+        src/query/query_optimizer.hpp
+        src/query/gpu/kernels/reduce_kernels.cu
+        src/query/gpu/kernels/reduce_kernels.cuh
+        src/query/gpu/kernels/helper_kernels.cu
+        src/query/gpu/kernels/helper_kernels.cuh
+        src/query/gpu/kernels/order_by.cu
+        src/query/gpu/kernels/order_by.cuh
+
+        src/utils/file_utils.cpp
+        src/utils/file_utils.hpp
 
         # CPU stuff
         src/query/cpu/from_resolver.cpp
@@ -132,19 +150,8 @@ set(SOURCES
 
         src/query/gpu/kernels/inequality_kernel.cu
         src/query/gpu/kernels/inequality_kernel.cuh
-
-        src/query/query_optimizer.cpp
-        src/query/query_optimizer.hpp
-
-        src/query/resolve_result.hpp
-        src/query/query_optimizer.cpp
-        src/query/query_optimizer.hpp
-        src/query/gpu/kernels/reduce_kernels.cu
-        src/query/gpu/kernels/reduce_kernels.cuh
-        src/query/gpu/kernels/helper_kernels.cu
-        src/query/gpu/kernels/helper_kernels.cuh
-        src/query/gpu/kernels/order_by.cu
-        src/query/gpu/kernels/order_by.cuh
+        src/utils/io.cpp
+        src/utils/io.hpp
 )
 
 #
@@ -202,8 +209,7 @@ set_source_files_properties(
 #            SANDBOX
 # ==============================
 #
-add_executable(
-        Sandbox
+add_executable(Sandbox
         src/Sandbox.cpp
         ${SOURCES}
 )

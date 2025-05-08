@@ -9,6 +9,8 @@
 #include <hsql/sql/ColumnType.h>
 #include <omp.h>
 
+#include "utils/string_utils.hpp"
+
 
 static std::vector<DataType> inferTypes(const csv::CSVRow& row) {
     std::vector<DataType> types;
@@ -41,20 +43,12 @@ static std::vector<DataType> inferTypes(const csv::CSVRow& row) {
     return types;
 }
 
-inline std::string trim(const std::string& s) {
-    auto start = s.find_first_not_of(" \t\r\n");
-    if (start == std::string::npos) return ""; // all whitespace
-
-    auto end = s.find_last_not_of(" \t\r\n");
-    return s.substr(start, end - start + 1);
-}
-
 inline std::string fixHeaderName(const std::string& name) {
     size_t pos = name.find("(P)");
     if (pos != std::string::npos && pos >= 2) {
-        return trim(name.substr(0, pos));
+        return StringUtils::trim(name.substr(0, pos));
     } else {
-        return trim(name);
+        return StringUtils::trim(name);
     }
 }
 
@@ -183,15 +177,16 @@ static std::vector<DataType> inferTypes(std::string row) {
     return types;
 }
 
-
-table * DBHelper::fromCSV_Unchecked(std::string path) {
+table * DBHelper::fromCSV_Unchecked(const std::string& path) {
     auto table   = new ::table();
-    std::vector<std::string> lines;
     std::ifstream file(path);
 
     if (!file.is_open()) {
         throw std::runtime_error("Unable to open file: " + path);
     }
+
+    std::vector<std::string> lines;
+
 
     std::string line;
     while (std::getline(file, line)) {

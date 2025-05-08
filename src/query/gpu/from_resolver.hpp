@@ -9,7 +9,7 @@
 
 #include "store.hpp"
 #include "db/table.hpp"
-#include "query/resolve_result.hpp"
+#include "query/resolver.hpp"
 
 
 namespace FromResolver::GPU {

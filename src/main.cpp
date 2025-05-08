@@ -16,6 +16,8 @@
 #include "query/cpu_executor.hpp"
 #include "query/gpu_executor.hpp"
 #include "query/cpu/from_resolver.hpp"
+#include "utils/file_utils.hpp"
+#include "utils/io.hpp"
 #include "utils/string_utils.hpp"
 
 namespace fs = std::filesystem;
@@ -434,28 +436,81 @@ void editor(std::vector<std::string> params) {
 }
 
 
-int main() {
+int main(int argc, char** argv) {
+    if (argc == 1) {
+        global_tables.clear();
+
+        std::cout << "gsql++ running." << std::endl;
+        std::cout << "use load / add [path] to load a csv file as table," << std::endl;
+        std::cout << "use remove [name] to remove a table," << std::endl;
+        std::cout << "use details [name] / [names] to show table details" << std::endl;
+        std::cout << "or enter a SQL query" << std::endl;
+
+        CLI cli(sql);
+        cli.addCommand("load", load_table);
+        cli.addCommand("add", load_table);
+        cli.addCommand("save", save_table);
+        cli.addCommand("remove", removeTable);
+        cli.addCommand("details", show_details);
+        cli.addCommand("editor", editor);
+        cli.addCommand("dummy", dummy);
+        cli.addCommand("show", show_table);
+        cli.addCommand("hash", hash_table);
+        cli.addCommand("sort", sort_table);
+        cli.addCommand("cfg", cfg);
+
+        cli.run();
+
+        return 0;
+    }
+
+    if (argc != 3) {
+        std::cout << "Usage: ./main [data-folder] [query-file]";
+        return 0;
+    }
+
+    std::string data_folder = argv[1];
+    std::string query_file  = argv[2];
+
+    std::string query = FileUtils::fileAsString(query_file);
+
+    hsql::SQLParserResult parser_result;
+    hsql::SQLParser::parse(query, &parser_result);
+
+    if (!parser_result.isValid()) {
+        std::cerr << "Invalid SQL query" << std::endl;
+        return 0;
+    }
+
+    auto inputs = FromResolver::resolveQueryNeeds(parser_result);
     global_tables.clear();
 
-    std::cout << "gsql++ running." << std::endl;
-    std::cout << "use load / add [path] to load a csv file as table," << std::endl;
-    std::cout << "use remove [name] to remove a table," << std::endl;
-    std::cout << "use details [name] / [names] to show table details" << std::endl;
-    std::cout << "or enter a SQL query" << std::endl;
+    io::disableOutput();
 
-    CLI cli(sql);
-    cli.addCommand("load", load_table);
-    cli.addCommand("add", load_table);
-    cli.addCommand("save", save_table);
-    cli.addCommand("remove", removeTable);
-    cli.addCommand("details", show_details);
-    cli.addCommand("editor", editor);
-    cli.addCommand("dummy", dummy);
-    cli.addCommand("show", show_table);
-    cli.addCommand("hash", hash_table);
-    cli.addCommand("sort", sort_table);
-    cli.addCommand("cfg", cfg);
+    try {
+        fs::path data_path(data_folder);
+        for (const auto& table: inputs) {
+            load_table({(data_path / fs::path(table + ".csv")).string()});
+        }
 
-    cli.run();
+        std::vector<table*> r_vec;
+
+        r_vec = time_it(GPUExecutor::executeQuery(parser_result, global_tables));
+
+        if (r_vec.size() > 1) {
+
+        } else {
+            auto output_path = data_folder / fs::path("team6.csv");
+            global_tables[{"__team_6__query_result__"}] = r_vec[0];
+            if (fs::exists(output_path)) {
+                fs::remove_all(output_path);
+            }
+            save_table({"__team_6__query_result__", output_path.string()});
+        }
+    } catch (std::exception& e) {
+        std::cerr << "Query failed: " + std::string(e.what()) << std::endl;
+    } catch (...) {
+        std::cerr << "Query failed: Unknown error" << std::endl;
+    }
     return 0;
 }

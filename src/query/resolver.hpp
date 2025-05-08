@@ -5,8 +5,11 @@
 #ifndef RESOLVE_RESULT_HPP
 #define RESOLVE_RESULT_HPP
 
+#include <hsql/SQLParserResult.h>
+
 #include "store.hpp"
 #include "../db/table.hpp"
+
 
 namespace FromResolver {
     struct ResolveResult {
@@ -122,6 +125,9 @@ namespace FromResolver {
 
         return result;
     }
+
+
+    std::set<std::string> resolveQueryNeeds(const hsql::SQLParserResult &query);
 
 
 }

@@ -13,7 +13,7 @@
 #include <hsql/SQLParserResult.h>
 #include <hsql/sql/SelectStatement.h>
 
-#include "resolve_result.hpp"
+#include "resolver.hpp"
 #include "db/table.hpp"
 
 
