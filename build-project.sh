@@ -14,7 +14,7 @@ mkdir -p build
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
 # Build the project
-cmake --build build --config Release
+cmake --build build --config Release --target gsql__
 
 # Determine the binary name (with extension on Windows)
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then

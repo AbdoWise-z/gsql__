@@ -76,7 +76,7 @@ void GFI::fill(
     cu::free(_shape);
 }
 
-static auto columnNullsAllocator = [] (void* ptr, BufferAllocator alloc) {
+auto columnNullsAllocator = [] (void* ptr, BufferAllocator alloc) {
     auto col = static_cast<column*>(ptr);
     auto size = col->nulls.size();
     void* gpuPtr = 0;
@@ -92,7 +92,7 @@ static auto columnNullsAllocator = [] (void* ptr, BufferAllocator alloc) {
 };
 
 
-static auto columnPoolAllocator = [] (void* ptr, BufferAllocator alloc) {
+auto columnPoolAllocator = [] (void* ptr, BufferAllocator alloc) {
     auto col = static_cast<column*>(ptr);
     auto size = col->data.size();
     auto dataSize = size;
@@ -159,7 +159,7 @@ static auto columnPoolAllocator = [] (void* ptr, BufferAllocator alloc) {
     return result;
 };
 
-static auto columnIndexPoolAllocator = [] (void* ptr, const BufferAllocator& alloc) {
+auto columnIndexPoolAllocator = [] (void* ptr, const BufferAllocator& alloc) {
     auto col = static_cast<column*>(ptr);
     auto index_table = col->sorted;
     auto size = index_table.size();
@@ -174,7 +174,7 @@ static auto columnIndexPoolAllocator = [] (void* ptr, const BufferAllocator& all
     return std::make_pair(size * sizeof(size_t), gpuPtr);
 };
 
-static auto columnHashPoolAllocator = [] (void* ptr, const BufferAllocator& alloc) {
+auto columnHashPoolAllocator = [] (void* ptr, const BufferAllocator& alloc) {
     auto col = static_cast<column*>(ptr);
     auto hash_table = col->hashed;
     auto size = hash_table.size();
@@ -203,7 +203,7 @@ static auto columnHashPoolAllocator = [] (void* ptr, const BufferAllocator& allo
     return std::make_pair(size * ex_size * sizeof(size_t), gpuPtr);
 };
 
-static GpuBufferPool pool(Cfg::maxGPUMemory);
+GpuBufferPool pool(Cfg::maxGPUMemory);
 
 void GFI::equality(
         tensor<char, Device::GPU> *result,
@@ -1031,7 +1031,7 @@ void GFI::inequality(tensor<char, Device::GPU> *result, column *col_1, tval valu
 }
 
 template<typename T, typename __rf>
-static T run_reducer(T* input, size_t n, __rf func) {
+T run_reducer(T* input, size_t n, __rf func) {
     if (n == 0) return static_cast<T>(0);
     size_t blocks = (n + Cfg::BlockDim * 2 - 1) / (Cfg::BlockDim * 2);
 
@@ -1058,7 +1058,7 @@ static T run_reducer(T* input, size_t n, __rf func) {
 
 
 template<typename T, typename __nrf>
-static T run_reducer_nulls(T* input, char* nulls, size_t n, __nrf func) {
+T run_reducer_nulls(T* input, char* nulls, size_t n, __nrf func) {
     if (n == 0) return static_cast<T>(0);
     size_t blocks = (n + Cfg::BlockDim * 2 - 1) / (Cfg::BlockDim * 2);
 
@@ -1264,7 +1264,7 @@ void GFI::logical_not(const tensor<char, Device::GPU> *a, tensor<char, Device::G
     CUDA_CHECK_LAST_ERROR("TensorKernel::logical_not");
 }
 
-static void run_prefix_sum(size_t* input, size_t* output, size_t n) {
+void run_prefix_sum(size_t* input, size_t* output, size_t n) {
     if (n == 0) return;
 
     size_t blocks = (n + Cfg::BlockDim * 2 - 1) / (Cfg::BlockDim * 2);
@@ -1295,7 +1295,7 @@ static void run_prefix_sum(size_t* input, size_t* output, size_t n) {
     cudaFree(d_block_sums);
 }
 
-static void run_prefix_sum(char* input, size_t* output, size_t n) {
+void run_prefix_sum(char* input, size_t* output, size_t n) {
     if (n == 0) return;
 
     size_t blocks = (n + Cfg::BlockDim * 2 - 1) / (Cfg::BlockDim * 2);
@@ -1325,7 +1325,7 @@ static void run_prefix_sum(char* input, size_t* output, size_t n) {
     cu::free(d_block_sums);
 }
 
-static void run_prefix_sum(index_t* input, index_t* output, size_t n) {
+void run_prefix_sum(index_t* input, index_t* output, size_t n) {
     if (n == 0) return;
 
     size_t blocks = (n + Cfg::BlockDim * 2 - 1) / (Cfg::BlockDim * 2);
@@ -1354,7 +1354,7 @@ static void run_prefix_sum(index_t* input, index_t* output, size_t n) {
     cu::free(d_block_sums);
 }
 //
-// static void run_prefix_sum(uint32_t* input, uint32_t* output, size_t n, size_t pins) {
+// void run_prefix_sum(uint32_t* input, uint32_t* output, size_t n, size_t pins) {
 //     if (n == 0) return;
 //
 //     size_t blocks = (n + Cfg::BlockDim * 2 - 1) / (Cfg::BlockDim * 2);
@@ -1426,7 +1426,7 @@ std::vector<size_t> GFI::iterator(tensor<char, Device::GPU> *a) {
     return result;
 }
 
-static std::vector<index_t> sort_int64_t(column* col_1) {
+std::vector<index_t> sort_int64_t(column* col_1) {
     if (col_1->type != INTEGER) throw UnsupportedOperationError("Sort of type int on non-integer");
 
     size_t size = col_1->data.size();
@@ -1544,7 +1544,7 @@ static std::vector<index_t> sort_int64_t(column* col_1) {
     return result;
 }
 
-static std::vector<index_t> sort_int64_t_streaming(column* col_1) {
+std::vector<index_t> sort_int64_t_streaming(column* col_1) {
     if (col_1->type != INTEGER)
         throw UnsupportedOperationError("Sort of type int on non-integer");
 
@@ -1689,7 +1689,7 @@ static std::vector<index_t> sort_int64_t_streaming(column* col_1) {
     return result;
 }
 
-static std::vector<index_t> sort_double_t(column* col_1) {
+std::vector<index_t> sort_double_t(column* col_1) {
     if (col_1->type != FLOAT) throw UnsupportedOperationError("Sort of type float on non-float");
 
     size_t size = col_1->data.size();
@@ -1813,7 +1813,7 @@ static std::vector<index_t> sort_double_t(column* col_1) {
 }
 
 
-static std::vector<index_t> sort_double_t_streaming(column* col_1) {
+std::vector<index_t> sort_double_t_streaming(column* col_1) {
     if (col_1->type != FLOAT)
         throw UnsupportedOperationError("Sort of type float on non-float");
 
@@ -1960,7 +1960,7 @@ static std::vector<index_t> sort_double_t_streaming(column* col_1) {
 }
 
 
-static std::vector<index_t> sort_dt_t(column* col_1) {
+std::vector<index_t> sort_dt_t(column* col_1) {
     if (col_1->type != DateTime) throw UnsupportedOperationError("Sort of type DateTime on non-DateTime");
 
     size_t size = col_1->data.size();
@@ -2084,7 +2084,7 @@ static std::vector<index_t> sort_dt_t(column* col_1) {
     return result;
 }
 
-static std::vector<index_t> sort_dt_t_streaming(column* col_1) {
+std::vector<index_t> sort_dt_t_streaming(column* col_1) {
     if (col_1->type != DateTime)
         throw UnsupportedOperationError("Sort of type DateTime on non-DateTime");
 
@@ -2227,7 +2227,7 @@ static std::vector<index_t> sort_dt_t_streaming(column* col_1) {
     return result;
 }
 
-static std::vector<index_t> sort_string_t(column* col) {
+std::vector<index_t> sort_string_t(column* col) {
     if (col->type != STRING) throw UnsupportedOperationError("Sort of type String on non-String");
 
     size_t size = col->data.size();
@@ -2260,7 +2260,6 @@ static std::vector<index_t> sort_string_t(column* col) {
 
     auto maskSize = 8;
     index_t numPins  = (1 << maskSize);
-    index_t maskBits = (1 << maskSize) - 1;
 
     index_t curr_char = 0;
 
@@ -2368,7 +2367,7 @@ static std::vector<index_t> sort_string_t(column* col) {
 }
 
 
-static std::vector<index_t> sort_string_t_streaming(column* col) {
+std::vector<index_t> sort_string_t_streaming(column* col) {
     if (col->type != STRING)
         throw UnsupportedOperationError("Sort of type String on non-String");
 
