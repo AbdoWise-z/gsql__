@@ -5,13 +5,9 @@
 #ifndef IO_HPP
 #define IO_HPP
 
-
-
 namespace io {
     void disableOutput();
     void enableOutput();
 }
-
-
 
 #endif //IO_HPP

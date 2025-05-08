@@ -10,7 +10,8 @@ set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -rdc=true -arch=sm_52")
 set(CMAKE_CUDA_ARCHITECTURES 52)
 
 # Include and link directories
-include_directories(libs)
+include_directories(libs/hsql)
+include_directories(libs/csv)
 include_directories(src)
 link_directories(libs/hsql)
 find_package(OpenMP REQUIRED)
