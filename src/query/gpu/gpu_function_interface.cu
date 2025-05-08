@@ -2534,8 +2534,8 @@ std::vector<index_t> GFI::sort(column *col_1) {
                 return sort_double_t_streaming(col_1);
             return sort_double_t(col_1);
         case STRING:
-            if (Cfg::numStreams > 0)
-                return sort_string_t_streaming(col_1);
+            // if (Cfg::numStreams > 0)
+            //     return sort_string_t_streaming(col_1);
             return sort_string_t(col_1);
         case DateTime:
             if (Cfg::numStreams > 0)

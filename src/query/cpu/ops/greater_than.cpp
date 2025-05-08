@@ -176,10 +176,11 @@ tensor<char, Device::CPU> * Ops::CPU::greater_than(
                     (ValuesHelper::cmp(value, val , column_ptr->type) > 0 &&  literal_on_left) ||
                     (ValuesHelper::cmp(value, val , column_ptr->type) < 0 && !literal_on_left)
                     ) {
+
+                    hyperplane_pos[table_index] = i - result_offset[table_index];
                     result->fill(1, hyperplane_pos, mask);
                     }
 
-                hyperplane_pos[table_index]++;
             }
         }
 

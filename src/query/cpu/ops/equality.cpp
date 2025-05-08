@@ -186,8 +186,9 @@ tensor<char, Device::CPU> * Ops::CPU::equality(
             }
 
             for (size_t i = result_offset[table_index]; i < result_offset[table_index] + result_size[table_index]; i++) {
-                const auto& val = column_ptr->data[i];
                 if (column_ptr->nulls[i]) continue;
+
+                const auto& val = column_ptr->data[i];
                 const auto cond = (
                     (dt_search_type == 0 && ValuesHelper::cmp(val, value, column_ptr->type) == 0) ||
                     (dt_search_type == 1 && (val.t->year == value.t->year && val.t->month == value.t->month && val.t->day == value.t->day)) ||
@@ -195,10 +196,9 @@ tensor<char, Device::CPU> * Ops::CPU::equality(
                 );
 
                 if (cond) {
+                    hyperplane_pos[table_index] = i - result_offset[table_index];
                     result->fill(1, hyperplane_pos, mask);
                 }
-
-                hyperplane_pos[table_index]++;
             }
         }
 

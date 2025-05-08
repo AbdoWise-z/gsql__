@@ -285,7 +285,7 @@ std::pair<tval, DataType> ValuesHelper::getLiteralFrom(hsql::Expr * literal) {
     tval literal_v {};
     DataType literal_t = STRING;
     if (literal->type == hsql::ExprType::kExprLiteralString) {
-        auto lt = ValuesHelper::parseDateTime(literal->name);
+        auto lt = ValuesHelper::parseDateTime(literal->name, false);
         if (lt != std::nullopt) {
             literal_v = ValuesHelper::create_from(*lt);
             literal_t = DateTime;

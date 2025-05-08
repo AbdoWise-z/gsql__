@@ -467,7 +467,8 @@ std::pair<std::set<std::string>, table*> SelectExecutor::CPU::Execute(hsql::SQLS
         }
 
         auto col = final_result_construction.result->columns[idx];
-        auto sorted = GFI::sort(col);
+        if (!col->isSortIndexed()) col->buildSortedIndexes();
+        auto sorted = col->sorted;
 
         if (order->type == hsql::OrderType::kOrderDesc) {
             for (index_t i = 0; i < sorted.size() / 2; i++) {
