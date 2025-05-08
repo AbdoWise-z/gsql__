@@ -104,33 +104,22 @@ tensor<char, Device::GPU>* FilterApplier::GPU::apply(
             return result;
         }
 
-        throw UnsupportedOperatorError(std::to_string(op));
-    } else if (expr_type == hsql::ExprType::kExprLiteralString) {
-#ifdef FILTER_DEBUG
-        std::cout << "hsql::ExprType::kExprLiteralString" << std::endl;
-#endif
-
         auto* result = new tensor<char, Device::GPU>(result_size);
-        result->setAll(strlen(eval->name) > 0 ? 1 : 0);
-        return result;
-    } else if (expr_type == hsql::ExprType::kExprLiteralInt) {
-#ifdef FILTER_DEBUG
-        std::cout << "hsql::ExprType::kExprLiteralInt" << std::endl;
-#endif
+        auto literal = ValuesHelper::getLiteralFrom(eval);
 
-        auto* result = new tensor<char, Device::GPU>(result_size);
-        result->setAll(eval->ival > 0 ? 1 : 0);
-        return result;
-    } else if (expr_type == hsql::ExprType::kExprLiteralFloat) {
-#ifdef FILTER_DEBUG
-        std::cout << "hsql::ExprType::kExprLiteralFloat" << std::endl;
-#endif
-
-        auto* result = new tensor<char, Device::GPU>(result_size);
-        result->setAll(eval->fval > 0 ? 1 : 0);
+        result->setAll(ValuesHelper::isZero(literal.first, literal.second) ? 0 : 1);
+        ValuesHelper::deleteValue(literal.first, literal.second);
         return result;
     } else {
-        throw UnsupportedOperatorError(eval->getName());
+#ifdef FILTER_DEBUG
+        std::cout << "hsql::ExprType::kLiteral" << std::endl;
+#endif
+
+        auto* result = new tensor<char, Device::GPU>(result_size);
+        auto literal = ValuesHelper::getLiteralFrom(eval);
+
+        result->setAll(ValuesHelper::isZero(literal.first, literal.second) ? 0 : 1);
+        ValuesHelper::deleteValue(literal.first, literal.second);
+        return result;
     }
-    return nullptr;
 }

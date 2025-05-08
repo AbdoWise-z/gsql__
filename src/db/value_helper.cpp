@@ -331,7 +331,7 @@ std::pair<tval, DataType> ValuesHelper::getLiteralFrom(hsql::Expr * literal) {
             ValuesHelper::deleteValue(inner.first.second, inner.second);
             return {res, inner.second};
         } else {
-            throw UnsupportedOperatorError(std::to_string(literal->opType));
+            throw UnsupportedOperatorError(literal->getName());
         }
     } else {
         throw UnsupportedLiteralError();
@@ -469,6 +469,21 @@ tval ValuesHelper::neg(tval a, DataType t) {
     }
 
     return result;
+}
+
+bool ValuesHelper::isZero(tval a, DataType t) {
+    switch (t) {
+        case INTEGER:
+            return a.i == 0;
+        case FLOAT:
+            return a.d == 0.0;
+        case DateTime:
+            return dateTimeToInt(*a.t) == 0;
+        case STRING:
+            return a.s->size() == 0;
+    }
+
+    return true;
 }
 
 

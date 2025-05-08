@@ -187,6 +187,8 @@ namespace ValuesHelper {
     tval mul(tval, tval, DataType);
     tval neg(tval, DataType);
 
+    bool isZero(tval, DataType);
+
 }
 
 #endif //VALUE_HELPER_HPP
