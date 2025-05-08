@@ -29,12 +29,15 @@ git clone https://github.com/AbdoWise-z/gsql__.git
 cd gsql__
 ```
 
-Build the full project
-
+Install dependencies using:
 ```bash
-sudo ./build.sh
+sudo ./build-deps.sh
 ```
 
+Then Build the project with
+```bash
+./build-project.sh
+```
 
 ### Running
 
