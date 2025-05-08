@@ -39,12 +39,12 @@ Build the full project
 Run the compiled binary:
 
 ```bash
-./main [inputs folder] [query file]
+./gsql__ [inputs folder] [query file]
 ```
 
 Example:
 ```bash
-./main ./data_test ./data_test/q1.txt
+./gsql__ ./data_test ./data_test/q1.txt
 ```
 
 

@@ -24,5 +24,5 @@ else
 fi
 
 # Copy the built binary to the script's root folder
-cp "build/$binary_name" "$SCRIPT_DIR/main"
+cp "build/$binary_name" "$SCRIPT_DIR/"
 echo "Copied $binary_name to project root"
