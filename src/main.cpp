@@ -1,7 +1,6 @@
 #include <iostream>
 
 #include "hsql/SQLParser.h"
-#include "csv.hpp"
 #include "db/table.hpp"
 #include "tensor/tensor.hpp"
 

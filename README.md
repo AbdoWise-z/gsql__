@@ -17,6 +17,8 @@
 - C++ compiler with C++17 or newer support (e.g., GCC 9+, Clang 10+, MSVC 2019+)
 - NVCC
 - CMake 3.28 or higher
+- Bison (install with ``sudo apt install bison``)
+- Flex (install with ``sudo apt install flex``)
 
 ### Building the Project
 
@@ -30,7 +32,7 @@ cd gsql__
 Build the full project
 
 ```bash
-./build.sh
+sudo ./build.sh
 ```
 
 
