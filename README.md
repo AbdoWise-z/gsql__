@@ -27,77 +27,42 @@ git clone https://github.com/AbdoWise-z/gsql__.git
 cd gsql__
 ```
 
-Build dependencies
+Build the full project
 
 ```bash
-mkdir build
-cd build
-cmake ..
-make
+./build.sh
 ```
 
-To build with a specific compiler or set build type:
-
-```bash
-cmake -DCMAKE_CXX_COMPILER=g++ -DCMAKE_BUILD_TYPE=Release ..
-```
 
 ### Running
 
 Run the compiled binary:
 
 ```bash
-./gsqlpp [arguments]
+./main [inputs folder] [query file]
 ```
 
-## Usage
-
-Example code snippet:
-
-```cpp
-#include "gsqlpp/gsqlpp.h"
-
-int main() {
-    gsqlpp::Database db;
-    db.execute("SELECT * FROM nodes WHERE value > 5;");
-    return 0;
-}
+Example:
+```bash
+./main ./data_test ./data_test/q1.txt
 ```
+
 
 ## Project Structure
 
 ```
-gsqlpp/
-├── include/       # Public headers
+gsql++/
+├── data_test/     # Sample data to test with
 ├── src/           # Source files
-├── tests/         # Unit and integration tests
+├── libs/          # project libraries
+├── deps/          # project dependancies
 ├── CMakeLists.txt # CMake build configuration
+├── build.sh
+├── build-project.sh
+├── build-deps.sh
 └── README.md
-```
-
-## Contributing
-
-Contributions are welcome! Feel free to open issues or submit pull requests.
-
-### Build and Test
-
-To run tests:
-
-```bash
-make test
-```
-
-Or with CTest:
-
-```bash
-ctest
 ```
 
 ## License
 
 MIT License
-
-## Acknowledgments
-
-- Inspired by SQL query syntax
-- Built with simplicity and performance in mind
