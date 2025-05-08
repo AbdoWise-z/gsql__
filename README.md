@@ -2,7 +2,7 @@
 | name                             | id      | bn | sec |
 |----------------------------------|---------|----|-----|
 | Abdulrahman Mohammed Abdelfattah | 9210587 | 23 | 1   |
-| Abdulrahman Mohammed Hefney      | 9210587 | 22 | 1   |
+| Abdulrahman Mohammed Hefney      | 9210584 | 22 | 1   |
 | Osama Saleh Farag                | 9210195 | 12 | 1   |
 | Amr Salah Eldin                  | 9210774 | 30 | 1   |
 
