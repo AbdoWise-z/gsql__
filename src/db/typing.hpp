@@ -7,10 +7,10 @@
 #include <string>
 
 enum DataType {
-    STRING = 0,
-    INTEGER = 1,
-    FLOAT = 2,
-    DateTime = 3
+    INTEGER = 0,
+    FLOAT = 1,
+    DateTime = 2,
+    STRING = 3,
 };
 
 std::string typeToString(DataType);

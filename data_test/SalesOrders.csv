@@ -1,4 +1,4 @@
-Orders_id,CustomerName,TotalAmount,OrderDate,Products_id,Employees_id
+Orders_id (N) (P),CustomerName (T),TotalAmount (N),OrderDate (D),Products_id (N),Employees_id (N)
 1001,John Doe,150.45,2023-03-15 11:30:00,101,1
 1002,Olivia Harris,275.99,2022-08-02 14:00:00,102,3
 1003,William Johnson,95.75,2021-07-10 9:15:00,103,2

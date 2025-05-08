@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <hsql/sql/ColumnType.h>
 #include <omp.h>
+#include <regex>
 
 #include "utils/string_utils.hpp"
 
@@ -43,66 +44,78 @@ static std::vector<DataType> inferTypes(const csv::CSVRow& row) {
     return types;
 }
 
-inline std::string fixHeaderName(const std::string& name) {
-    size_t pos = name.find("(P)");
-    if (pos != std::string::npos && pos >= 2) {
-        return StringUtils::trim(name.substr(0, pos));
-    } else {
-        return StringUtils::trim(name);
+
+inline std::pair<std::string, std::vector<char>> strip_tags(std::string input) {
+    std::vector<char> tags;
+
+    // Regular expression to match trailing (x) groups
+    std::regex tag_regex(R"(\s*\(([a-zA-Z0-9])\)\s*$)");
+    std::smatch match;
+
+    // Keep removing tags from the end
+    while (std::regex_search(input, match, tag_regex)) {
+        tags.push_back(match[1].str()[0]);  // Extract the character inside ()
+        input = StringUtils::trim(input.substr(0, match.position()));  // Remove the match from the end
     }
+
+    // Reverse tags to preserve original order
+    std::reverse(tags.begin(), tags.end());
+
+    return {input, tags};
 }
 
-table * DBHelper::fromCSV(std::string path) {
-    csv::CSVReader csv(path);
-    auto headers = csv.get_col_names();
-    for (auto & header : headers) {
-        header = fixHeaderName(header);
-    }
 
-    auto table   = new ::table();
-
-    bool first_row = true;
-    for (const auto& row : csv) {
-        std::vector<tval> values;
-        if (first_row) {
-            std::vector<DataType> types = inferTypes(row);
-            first_row = false;
-            table->setHeaders(headers, types);
-        }
-
-        std::optional<dateTime> dt;
-
-        for (auto field: row) {
-            tval val{};
-            switch (field.type()) {
-                case csv::DataType::CSV_STRING:
-                    dt = ValuesHelper::parseDateTime(field.get<std::string>());
-                    if (dt == std::nullopt)
-                        val.s = new std::string(field.get<std::string>());
-                    else
-                        val.t = new dateTime(dt.value());
-                    break;
-                case csv::DataType::CSV_INT8:
-                case csv::DataType::CSV_INT16:
-                case csv::DataType::CSV_INT32:
-                case csv::DataType::CSV_INT64:
-                    val.i = field.get<int64_t>();
-                    break;
-                case csv::DataType::UNKNOWN:
-                case csv::DataType::CSV_DOUBLE: // fixme: I just assume it's double ..
-                    val.d = field.get<double>();
-                    break;
-                default:
-                    throw std::runtime_error("Not implemented");
-            }
-            values.push_back(val);
-        }
-
-        table->addRecord(values);
-    }
-
-    return table;
-}
+// table * DBHelper::fromCSV(std::string path) {
+//     csv::CSVReader csv(path);
+//     auto headers = csv.get_col_names();
+//     for (auto & header : headers) {
+//         header = fixHeaderName(header);
+//     }
+//
+//     auto table   = new ::table();
+//
+//     bool first_row = true;
+//     for (const auto& row : csv) {
+//         std::vector<tval> values;
+//         if (first_row) {
+//             std::vector<DataType> types = inferTypes(row);
+//             first_row = false;
+//             table->setHeaders(headers, types);
+//         }
+//
+//         std::optional<dateTime> dt;
+//
+//         for (auto field: row) {
+//             tval val{};
+//             switch (field.type()) {
+//                 case csv::DataType::CSV_STRING:
+//                     dt = ValuesHelper::parseDateTime(field.get<std::string>());
+//                     if (dt == std::nullopt)
+//                         val.s = new std::string(field.get<std::string>());
+//                     else
+//                         val.t = new dateTime(dt.value());
+//                     break;
+//                 case csv::DataType::CSV_INT8:
+//                 case csv::DataType::CSV_INT16:
+//                 case csv::DataType::CSV_INT32:
+//                 case csv::DataType::CSV_INT64:
+//                     val.i = field.get<int64_t>();
+//                     break;
+//                 case csv::DataType::UNKNOWN:
+//                 case csv::DataType::CSV_DOUBLE: // fixme: I just assume it's double ..
+//                     val.d = field.get<double>();
+//                     break;
+//                 default:
+//                     throw std::runtime_error("Not implemented");
+//             }
+//             values.push_back(val);
+//         }
+//
+//         table->addRecord(values);
+//     }
+//
+//     return table;
+// }
 
 
 inline std::vector<std::string> parseCSVLine(const std::string& line) {
@@ -143,7 +156,6 @@ inline std::vector<std::string> parseCSVLine(const std::string& line) {
 
 static std::vector<DataType> inferTypes(std::string row) {
     std::vector<DataType> types;
-    std::optional<dateTime> dt;
 
 
     auto fields = parseCSVLine(row);
@@ -203,19 +215,46 @@ table * DBHelper::fromCSV_Unchecked(const std::string& path) {
         return table;
     }
 
+    std::vector<DataType> types;
     auto headers = parseCSVLine(lines[0]);
     for (auto & header : headers) {
-        header = fixHeaderName(header);
+        auto fixed_header = strip_tags(header);
+        header = fixed_header.first;
+
+        DataType dt;
+        for (char c : fixed_header.second) {
+            if (c == 'N') dt = FLOAT;
+            if (c == 'd') dt = DateTime;
+            if (c == 'T') dt = STRING;
+        }
+
+        types.push_back(dt);
     }
 
-    std::vector<DataType> types;
-    for (int i = 0;i < table->headers.size();i++) {
-        types.push_back(STRING);
 
-    }
-
+    // we love democracy (we are lazy to actually do it properly)
     if (lines.size() > 1) {
-        types = inferTypes(lines[1]);
+        int sampleIdx = 0;
+        std::vector<std::vector<int>> votes = std::vector<std::vector<int>>(types.size(), std::vector<int>(4, 0));
+        while (sampleIdx < 20) {
+            auto l = lines[random() % lines.size() + 1];
+            auto _t = inferTypes(l);
+            if (_t.size() == types.size()) {
+                for (size_t i = 0; i < types.size(); ++i) {
+                    votes[i][_t[i]]++;
+                }
+            }
+            sampleIdx++;
+        }
+
+        for (size_t i = 0; i < types.size(); ++i) {
+            auto _idx = 0;
+            for (size_t j = 0;j < votes[i].size(); ++j) {
+                if (votes[i][j] >= votes[i][_idx]) _idx = j;
+            }
+
+            types[i] = static_cast<DataType>(_idx);
+        }
     }
 
     table->setHeaders(headers, types);
