@@ -482,7 +482,8 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
 
         for (const auto& _f_col: final_result_construction.result->columns) {
             final_final_pro_max->columns.push_back(new column());
-            final_final_pro_max->columns.back()->data = std::vector<tval>(_f_col->data.size());
+            final_final_pro_max->columns.back()->data  = std::vector<tval>(_f_col->data.size());
+            final_final_pro_max->columns.back()->nulls = std::vector<char>(_f_col->data.size());
             final_final_pro_max->columns.back()->type = _f_col->type;
         }
 
@@ -490,7 +491,8 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
 
         for (const index_t &i : sorted) {
             for (int j = 0;j < final_final_pro_max->columns.size(); ++j) {
-                final_final_pro_max->columns[j]->data[index] = final_result_construction.result->columns[j]->data[i];
+                final_final_pro_max->columns[j]->data[index]  = final_result_construction.result->columns[j]->data[i];
+                final_final_pro_max->columns[j]->nulls[index] = final_result_construction.result->columns[j]->nulls[i];
             }
 
             index++;
