@@ -1,3 +1,7 @@
-/build*
+# build folders
+/build-*
+/build
 
+# executables
 gsql__
+main
