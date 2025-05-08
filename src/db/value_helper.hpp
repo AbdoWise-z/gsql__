@@ -179,7 +179,7 @@ namespace ValuesHelper {
         return result;
     }
 
-    std::pair<tval, DataType> getLiteralFrom(hsql::Expr*);
+    std::pair<tval, DataType> getLiteralFrom(hsql::Expr*, bool strict = false);
 
     tval add(tval, tval, DataType);
     tval sub(tval, tval, DataType);

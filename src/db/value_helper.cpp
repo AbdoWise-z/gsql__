@@ -281,11 +281,11 @@ static std::pair<std::pair<tval, tval>, DataType> resolveBinaryOp(hsql::Expr * l
     return {{inner1.first, inner2.first}, common};
 }
 
-std::pair<tval, DataType> ValuesHelper::getLiteralFrom(hsql::Expr * literal) {
+std::pair<tval, DataType> ValuesHelper::getLiteralFrom(hsql::Expr * literal, bool strict) {
     tval literal_v {};
     DataType literal_t = STRING;
     if (literal->type == hsql::ExprType::kExprLiteralString) {
-        auto lt = ValuesHelper::parseDateTime(literal->name, false);
+        auto lt = ValuesHelper::parseDateTime(literal->name, strict);
         if (lt != std::nullopt) {
             literal_v = ValuesHelper::create_from(*lt);
             literal_t = DateTime;

@@ -112,27 +112,38 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
 
 
         tval value{};
-
-        auto literal_ = ValuesHelper::getLiteralFrom(literal);
         int dt_search_type = 0; // normal equality
-        try {
-            value = ValuesHelper::castTo(literal_.first, literal_.second, column_ptr->type);
-        } catch (...) {
-            if (literal_.second == STRING && column_ptr->type == DateTime) {
-                auto _test = ValuesHelper::parseDateTimeDateOnly(*literal_.first.s);
-                if (_test != std::nullopt) {
-                    value = ValuesHelper::create_from(*_test);
-                    dt_search_type = 1; // search only on date
-                } else {
-                    _test = ValuesHelper::parseDateTimeTimeOnly(*literal_.first.s);
+        if (literal->type == hsql::kExprLiteralString) {
+            auto literal_ = ValuesHelper::getLiteralFrom(literal, true);
+            try {
+                value = ValuesHelper::castTo(literal_.first, literal_.second, column_ptr->type);
+                ValuesHelper::deleteValue(literal_.first, literal_.second);
+            } catch (...) {
+                if (literal_.second == STRING && column_ptr->type == DateTime) {
+                    auto _test = ValuesHelper::parseDateTimeDateOnly(*literal_.first.s);
                     if (_test != std::nullopt) {
                         value = ValuesHelper::create_from(*_test);
-                        dt_search_type = 2; // search only on time
+                        dt_search_type = 1; // search only on date
                     } else {
-                        throw std::invalid_argument("Type mismatch between column and literal");
+                        _test = ValuesHelper::parseDateTimeTimeOnly(*literal_.first.s);
+                        if (_test != std::nullopt) {
+                            value = ValuesHelper::create_from(*_test);
+                            dt_search_type = 2; // search only on time
+                        } else {
+                            throw std::invalid_argument("Type mismatch between column and literal");
+                        }
                     }
+                    ValuesHelper::deleteValue(literal_.first, literal_.second);
+                } else {
+                    throw std::invalid_argument("Type mismatch between column and literal");
                 }
-            } else {
+            }
+        } else {
+            auto literal_ = ValuesHelper::getLiteralFrom(literal, false);
+            try {
+                value = ValuesHelper::castTo(literal_.first, literal_.second, column_ptr->type);
+                ValuesHelper::deleteValue(literal_.first, literal_.second);
+            } catch (...) {
                 throw std::invalid_argument("Type mismatch between column and literal");
             }
         }

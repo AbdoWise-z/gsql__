@@ -110,27 +110,52 @@ tensor<char, Device::CPU> * Ops::CPU::equality(
         auto column_ptr = table_ptr->columns[pos];
 
         tval value{};
-        auto literal_ = ValuesHelper::getLiteralFrom(literal);
         int dt_search_type = 0; // normal equality
-        try {
-            value = ValuesHelper::castTo(literal_.first, literal_.second, column_ptr->type);
-        } catch (...) {
-            if (literal_.second == STRING && column_ptr->type == DateTime) {
-                auto _test = ValuesHelper::parseDateTimeDateOnly(*literal_.first.s);
-                if (_test != std::nullopt) {
-                    value = ValuesHelper::create_from(*_test);
-                    dt_search_type = 1; // search only on date
-                } else {
-                    _test = ValuesHelper::parseDateTimeTimeOnly(*literal_.first.s);
+        if (literal->type == hsql::kExprLiteralString) {
+            auto literal_ = ValuesHelper::getLiteralFrom(literal, true);
+            try {
+                value = ValuesHelper::castTo(literal_.first, literal_.second, column_ptr->type);
+                ValuesHelper::deleteValue(literal_.first, literal_.second);
+            } catch (...) {
+                if (literal_.second == STRING && column_ptr->type == DateTime) {
+                    auto _test = ValuesHelper::parseDateTimeDateOnly(*literal_.first.s);
                     if (_test != std::nullopt) {
                         value = ValuesHelper::create_from(*_test);
-                        dt_search_type = 2; // search only on time
+                        dt_search_type = 1; // search only on date
                     } else {
-                        throw std::invalid_argument("Type mismatch between column and literal");
+                        _test = ValuesHelper::parseDateTimeTimeOnly(*literal_.first.s);
+                        if (_test != std::nullopt) {
+                            value = ValuesHelper::create_from(*_test);
+                            dt_search_type = 2; // search only on time
+                        } else {
+                            throw std::invalid_argument("Type mismatch between column and literal");
+                        }
                     }
+                    ValuesHelper::deleteValue(literal_.first, literal_.second);
+                } else {
+                    throw std::invalid_argument("Type mismatch between column and literal");
                 }
-            } else {
+            }
+        } else {
+            auto literal_ = ValuesHelper::getLiteralFrom(literal, false);
+            try {
+                value = ValuesHelper::castTo(literal_.first, literal_.second, column_ptr->type);
+                ValuesHelper::deleteValue(literal_.first, literal_.second);
+            } catch (...) {
                 throw std::invalid_argument("Type mismatch between column and literal");
+            }
+        }
+
+        std::vector<uint64_t> mask;
+        std::vector<size_t> hyperplane_pos;
+        int table_index = 0;
+        for (int i = 0;i < input_data->table_names.size(); ++i) {
+            hyperplane_pos.push_back(0);
+            if (input_data->table_names[i].contains(table_name)) {
+                mask.push_back(0);
+                table_index = i;
+            } else {
+                mask.push_back(1);
             }
         }
 
@@ -144,19 +169,6 @@ tensor<char, Device::CPU> * Ops::CPU::equality(
 #ifdef OP_EQUALS_DEBUG
             std::cout << "kExprOperator::Equals Accelerating using hash index" << std::endl;
 #endif
-            std::vector<uint64_t> mask;
-            std::vector<size_t> hyperplane_pos;
-            int table_index = 0;
-            for (int i = 0;i < input_data->table_names.size(); ++i) {
-                hyperplane_pos.push_back(0);
-                if (input_data->table_names[i].contains(table_name)) {
-                    mask.push_back(0);
-                    table_index = i;
-                } else {
-                    mask.push_back(1);
-                }
-            }
-
 
             auto bucket = column_ptr->hashSearch(value);
 
@@ -172,18 +184,6 @@ tensor<char, Device::CPU> * Ops::CPU::equality(
             }
 
         } else {
-            std::vector<uint64_t> mask;
-            std::vector<size_t> hyperplane_pos;
-            int table_index = 0;
-            for (int i = 0;i < input_data->table_names.size(); ++i) {
-                hyperplane_pos.push_back(0);
-                if (input_data->table_names[i].contains(table_name)) {
-                    mask.push_back(0);
-                    table_index = i;
-                } else {
-                    mask.push_back(1);
-                }
-            }
 
             for (size_t i = result_offset[table_index]; i < result_offset[table_index] + result_size[table_index]; i++) {
                 if (column_ptr->nulls[i]) continue;
