@@ -104,6 +104,9 @@ set(SOURCES
         src/query/gpu/ops/equality.cpp
         src/query/gpu/ops/equality.hpp
 
+        src/query/gpu/ops/null_equality.cpp
+        src/query/gpu/ops/null_equality.hpp
+
         src/query/gpu/ops/logical_and.cpp
         src/query/gpu/ops/logical_and.hpp
         src/query/gpu/ops/logical_or.cpp

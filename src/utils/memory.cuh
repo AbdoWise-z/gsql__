@@ -36,7 +36,7 @@ namespace cu {
     }
 
     inline void* stringToDevice(const std::string& str) {
-        auto size = str.size();
+        auto size = str.size() + 1;
         void* ptr = malloc(size * sizeof(char));
         toDevice(str.c_str(), ptr, size * sizeof(char));
         return ptr;

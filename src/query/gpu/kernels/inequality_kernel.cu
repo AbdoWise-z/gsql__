@@ -59,3 +59,5 @@ __global__ void InequalityKernel::Inequality_kernel_int64_t(
         }
     }
 }
+
+extern __device__ const char* EMPTY_CHAR = "";

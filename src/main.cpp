@@ -167,9 +167,14 @@ void show_table(std::vector<std::string> params) {
 
     for (int i = start; i < start + count; i++) {
         for (int k = 0;k < table->headers.size();k++) {
+            if (table->columns[k]->nulls[i]) {
+                std::cout << std::setw(w[k]) << std::left << color("null", RED_FG) << "|";
+                continue;
+            }
+
             switch (table->columns[k]->type) {
                 case STRING:
-                    std::cout << std::setw(w[k]) << std::left << color(StringUtils::limit(*table->columns[k]->data[i].s, 30), RED_FG)                 << "|";
+                    std::cout << std::setw(w[k]) << std::left << color(StringUtils::limit(*table->columns[k]->data[i].s, 30), CYAN_FG) << "|";
                     break;
                 case INTEGER:
                     std::cout << std::setw(w[k]) << std::left << color(std::to_string(table->columns[k]->data[i].i) + " ", CYAN_FG) << "|";

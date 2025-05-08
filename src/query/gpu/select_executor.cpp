@@ -277,6 +277,7 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
                     final_result_construction.result->columns.push_back(new column());
                     final_result_construction.result->columns.back()->type = INTEGER;
                     final_result_construction.result->columns.back()->data.push_back(Agg::GPU::count(result.result));
+                    final_result_construction.result->columns.back()->nulls.push_back(0);
                 } else {
                     throw UnsupportedOperationError(func_name + "(table) not supported");
                 }
@@ -311,28 +312,38 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
                     final_result_construction.result->columns.push_back(new column());
                     final_result_construction.result->columns.back()->type = col->type;
                     final_result_construction.result->columns.back()->data.push_back(Agg::GPU::sum(col));
+                    final_result_construction.result->columns.back()->nulls.push_back(0);
                 } else if (StringUtils::equalsIgnoreCase(func_name, "avg")) {
                     final_result_construction.result->columns.push_back(new column());
                     final_result_construction.result->columns.back()->type = FLOAT;
+                    if (col->type == DateTime) final_result_construction.result->columns.back()->type = DateTime;
                     final_result_construction.result->columns.back()->data.push_back(Agg::GPU::avg(col));
+                    final_result_construction.result->columns.back()->nulls.push_back(0);
                 } else if (StringUtils::equalsIgnoreCase(func_name, "min")) {
                     final_result_construction.result->columns.push_back(new column());
                     final_result_construction.result->columns.back()->type = col->type;
                     final_result_construction.result->columns.back()->data.push_back(Agg::GPU::min(col));
+                    final_result_construction.result->columns.back()->nulls.push_back(0);
                 } else if (StringUtils::equalsIgnoreCase(func_name, "max")) {
                     final_result_construction.result->columns.push_back(new column());
                     final_result_construction.result->columns.back()->type = col->type;
                     final_result_construction.result->columns.back()->data.push_back(Agg::GPU::max(col));
+                    final_result_construction.result->columns.back()->nulls.push_back(0);
                 } else if (StringUtils::equalsIgnoreCase(func_name, "count")) {
                     final_result_construction.result->columns.push_back(new column());
                     final_result_construction.result->columns.back()->type = INTEGER;
                     final_result_construction.result->columns.back()->data.push_back(Agg::GPU::count(col));
+                    final_result_construction.result->columns.back()->nulls.push_back(0);
                 } else {
                     throw UnsupportedOperationError(func_name + "(col) not supported");
                 }
             }
         } else if (expr->type == hsql::kExprSelect) {
+            if (tableSize != 0 && tableSize != result.result->size()) {
+                throw TableSizeMismatch();
+            }
 
+            tableSize = result.result->size();
             FromResolver::ResolveResult injectedInput;
             auto injectedTable = new table();
             injectedTable->headers = result.result->headers;
@@ -340,6 +351,7 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
                 injectedTable->columns.push_back(new column());
                 injectedTable->columns.back()->type = col->type;
                 injectedTable->columns.back()->data.push_back(tval{});
+                injectedTable->columns.back()->nulls.push_back(0);
             }
 
             injectedInput.table_names.push_back(result_tables);
@@ -352,7 +364,8 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
             for (size_t rowIdx = 0; rowIdx < result.result->size();rowIdx++) {
                 for (size_t colIdx = 0; colIdx < result.result->columns.size();colIdx++) {
                     GFI::clearCache(injectedTable->columns[colIdx]);
-                    injectedTable->columns[colIdx]->data[0] = result.result->columns[colIdx]->data[rowIdx];
+                    injectedTable->columns[colIdx]->nulls[0] = result.result->columns[colIdx]->nulls[rowIdx];
+                    injectedTable->columns[colIdx]->data[0]  = result.result->columns[colIdx]->data[rowIdx];
                 }
 
                 auto _subResult = SelectExecutor::GPU::Execute(expr->select, tables, injectedInput);
@@ -384,6 +397,11 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
                                 final_result_construction.result->columns[output_col_idx_start]->type
                                 )
                             );
+                    final_result_construction.result->columns[output_col_idx_start]->nulls.push_back(_subResult.second->columns[0]->nulls[0]);
+
+                    if (_subResult.second->columns[0]->nulls[0]) {
+                        final_result_construction.result->columns[output_col_idx_start]->nullsCount++;
+                    }
                 } else {
                     if (output_col_idx_start == -1) {
                         output_col_idx_start = final_result_construction.result->headers.size();
@@ -404,6 +422,11 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
                                 final_result_construction.result->columns[colIdx]->type
                                 )
                             );
+
+                        final_result_construction.result->columns[colIdx]->nulls.push_back(_subResult.second->columns[colIdx - output_col_idx_start]->nulls[0]);
+                        if (_subResult.second->columns[colIdx - output_col_idx_start]->nulls[0]) {
+                            final_result_construction.result->columns[colIdx]->nullsCount++;
+                        }
                     }
                 }
 
@@ -533,6 +556,10 @@ SelectExecutor::GPU::ConstructionResult SelectExecutor::GPU::ConstructTable(
             for (int k = 0;k < t->headers.size();k++) {
                 auto val = t->columns[k]->data[tuple_index[m]];
                 result->columns[j]->data.push_back(ValuesHelper::copy(val, t->columns[k]->type));
+                result->columns[j]->nulls.push_back(t->columns[k]->nulls[tuple_index[m]]);
+                if (t->columns[k]->nulls[tuple_index[m]]) {
+                    result->columns[j]->nullsCount++;
+                }
                 j++;
             }
         }
@@ -576,6 +603,10 @@ void SelectExecutor::GPU::AppendTable(
             for (int k = 0;k < t->headers.size();k++) {
                 auto val = t->columns[k]->data[pos[m]];
                 result->columns[j]->data.push_back(ValuesHelper::copy(val, t->columns[k]->type));
+                result->columns[j]->nulls.push_back(t->columns[k]->nulls[pos[m]]);
+                if (t->columns[k]->nulls[pos[m]]) {
+                    result->columns[j]->nullsCount++;
+                }
                 j++;
             }
         }

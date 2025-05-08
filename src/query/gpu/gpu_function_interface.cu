@@ -76,10 +76,26 @@ void GFI::fill(
     cu::free(_shape);
 }
 
+static auto columnNullsAllocator = [] (void* ptr, BufferAllocator alloc) {
+    auto col = static_cast<column*>(ptr);
+    auto size = col->nulls.size();
+    void* gpuPtr = 0;
+
+    if (size == 0) return std::make_tuple(size, static_cast<void*>(nullptr), static_cast<VoidFunction>(nullptr));
+
+    gpuPtr = alloc(size * sizeof(char));
+    cu::toDevice(col->nulls.data(), gpuPtr, size * sizeof(char));
+    size = size * sizeof(int64_t);
+
+
+    return std::make_tuple(size, gpuPtr, static_cast<VoidFunction>(nullptr));
+};
+
 
 static auto columnPoolAllocator = [] (void* ptr, BufferAllocator alloc) {
     auto col = static_cast<column*>(ptr);
     auto size = col->data.size();
+    auto dataSize = size;
     void* gpuPtr = 0;
 
     // for dt
@@ -92,12 +108,12 @@ static auto columnPoolAllocator = [] (void* ptr, BufferAllocator alloc) {
         case INTEGER:
             gpuPtr = alloc(size * sizeof(int64_t));
             cu::toDevice(col->data.data(), gpuPtr, size * sizeof(int64_t));
-            size = size * sizeof(int64_t);
+            dataSize = size * sizeof(int64_t);
             break;
         case FLOAT:
             gpuPtr = alloc(size * sizeof(double));
             cu::toDevice(col->data.data(), gpuPtr, size * sizeof(double));
-            size = size * sizeof(double);
+            dataSize = size * sizeof(double);
             break;
         case DateTime:
             gpuPtr = alloc(size * sizeof(dateTime));
@@ -106,14 +122,16 @@ static auto columnPoolAllocator = [] (void* ptr, BufferAllocator alloc) {
                 dateTimeData[i] = *col->data[i].t;
             }
             cu::toDevice(dateTimeData.data(), gpuPtr, size * sizeof(dateTime));
-            size = size * sizeof(dateTime);
+            dataSize = size * sizeof(dateTime);
             break;
         case STRING:
+            dataSize = size * sizeof(char*);
             for (size_t i = 0; i < size; ++i) {
                 std::string* str = col->data[i].s;
                 auto gpu_str = alloc(str->size() + 1);
                 cu::toDevice(str->c_str(), gpu_str, str->size() + 1);
                 ptrs.push_back(gpu_str);
+                dataSize += str->size();
             }
             gpuPtr = cu::vectorToDevice(ptrs);
             break;
@@ -122,7 +140,7 @@ static auto columnPoolAllocator = [] (void* ptr, BufferAllocator alloc) {
 
     }
 
-    auto result = std::make_tuple(size, gpuPtr, [=] () {
+    auto result = std::make_tuple(dataSize, gpuPtr, [=] () {
         // free function
         if (col->type == STRING) {
             auto vec = cu::vectorFromDevice<void*>(gpuPtr, size);
@@ -207,6 +225,9 @@ void GFI::equality(
 
     auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
     auto _col_2 = pool.getBufferOrCreate(static_cast<void*>(col_2), static_cast<void*>(col_2), columnPoolAllocator);
+
+    auto _col_1_nulls = static_cast<char*>(pool.getBufferOrCreate(static_cast<void*>(&col_1->nulls), static_cast<void*>(col_1), columnNullsAllocator));
+    auto _col_2_nulls = static_cast<char*>(pool.getBufferOrCreate(static_cast<void*>(&col_2->nulls), static_cast<void*>(col_2), columnNullsAllocator));
     CUDA_CHECK_LAST_ERROR("GFI::equality pool.getBufferOrCreate columnPoolAllocator");
 
     void* _hash_table = nullptr;
@@ -231,7 +252,9 @@ void GFI::equality(
                     tileOffset.size(),
 
                     static_cast<int64_t*>(_col_1),
+                    _col_1_nulls,
                     static_cast<int64_t*>(_col_2),
+                    _col_2_nulls,
                     col_1->data.size(),
                     col_2->data.size(),
 
@@ -253,7 +276,9 @@ void GFI::equality(
                     tileOffset.size(),
 
                     static_cast<double*>(_col_1),
+                    _col_1_nulls,
                     static_cast<double*>(_col_2),
+                    _col_2_nulls,
                     col_1->data.size(),
                     col_2->data.size(),
 
@@ -275,7 +300,9 @@ void GFI::equality(
                     tileOffset.size(),
 
                     static_cast<const char**>(_col_1),
+                    _col_1_nulls,
                     static_cast<const char**>(_col_2),
+                    _col_2_nulls,
                     col_1->data.size(),
                     col_2->data.size(),
 
@@ -297,7 +324,9 @@ void GFI::equality(
                     tileOffset.size(),
 
                     static_cast<dateTime*>(_col_1),
+                    _col_1_nulls,
                     static_cast<dateTime*>(_col_2),
+                    _col_2_nulls,
                     col_1->data.size(),
                     col_2->data.size(),
 
@@ -327,6 +356,8 @@ void GFI::equality(
 
                     static_cast<int64_t*>(_col_1),
                     static_cast<int64_t*>(_col_2),
+                    _col_1_nulls,
+                    _col_2_nulls,
                     col_1->data.size(),
                     col_2->data.size(),
 
@@ -346,6 +377,8 @@ void GFI::equality(
 
                     static_cast<double*>(_col_1),
                     static_cast<double*>(_col_2),
+                    _col_1_nulls,
+                    _col_2_nulls,
                     col_1->data.size(),
                     col_2->data.size(),
 
@@ -365,6 +398,8 @@ void GFI::equality(
 
                     static_cast<const char**>(_col_1),
                     static_cast<const char**>(_col_2),
+                    _col_1_nulls,
+                    _col_2_nulls,
                     col_1->data.size(),
                     col_2->data.size(),
 
@@ -384,6 +419,8 @@ void GFI::equality(
 
                     static_cast<dateTime*>(_col_1),
                     static_cast<dateTime*>(_col_2),
+                    _col_1_nulls,
+                    _col_2_nulls,
                     col_1->data.size(),
                     col_2->data.size(),
 
@@ -413,10 +450,11 @@ void GFI::equality(
     cu::free(_tileSize);
 }
 
-void GFI::equality(tensor<char, Device::GPU> *result, column *col_1, tval value, std::vector<size_t> tileOffset,
+void GFI::equality(tensor<char, Device::GPU> *result, column *col_1, tval value, bool isNull, std::vector<size_t> tileOffset,
     std::vector<size_t> tileSize, size_t table_1_index, std::vector<size_t> mask) {
 
     auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
+    auto _col_1_nulls = static_cast<char*>(pool.getBufferOrCreate(static_cast<void*>(&col_1->nulls), static_cast<void*>(col_1), columnNullsAllocator));
     CUDA_CHECK_LAST_ERROR("GFI::equality pool.getBufferOrCreate columnPoolAllocator");
 
     auto _mask       = static_cast<size_t*>(cu::vectorToDevice(mask));
@@ -436,9 +474,10 @@ void GFI::equality(tensor<char, Device::GPU> *result, column *col_1, tval value,
                     result->data,
                     result->totalSize(),
                     tileOffset.size(),
-
                     static_cast<int64_t*>(_col_1),
                     value.i,
+                    _col_1_nulls,
+                    isNull,
                     col_1->data.size(),
 
                     _mask,
@@ -456,6 +495,8 @@ void GFI::equality(tensor<char, Device::GPU> *result, column *col_1, tval value,
 
                     static_cast<double*>(_col_1),
                     value.d,
+                    _col_1_nulls,
+                    isNull,
                     col_1->data.size(),
 
                     _mask,
@@ -473,6 +514,8 @@ void GFI::equality(tensor<char, Device::GPU> *result, column *col_1, tval value,
 
                     static_cast<const char**>(_col_1),
                     static_cast<const char*>(_sVal),
+                    _col_1_nulls,
+                    isNull,
                     col_1->data.size(),
 
                     _mask,
@@ -490,6 +533,8 @@ void GFI::equality(tensor<char, Device::GPU> *result, column *col_1, tval value,
 
                     static_cast<dateTime*>(_col_1),
                     *value.t,
+                    _col_1_nulls,
+                    isNull,
                     col_1->data.size(),
 
                     _mask,
@@ -636,6 +681,9 @@ void GFI::inequality(
 
     auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
     auto _col_2 = pool.getBufferOrCreate(static_cast<void*>(col_2), static_cast<void*>(col_2), columnPoolAllocator);
+
+    auto _col_1_nulls = static_cast<char*>(pool.getBufferOrCreate(static_cast<void*>(&col_1->nulls), static_cast<void*>(col_1), columnNullsAllocator));
+    auto _col_2_nulls = static_cast<char*>(pool.getBufferOrCreate(static_cast<void*>(&col_2->nulls), static_cast<void*>(col_2), columnNullsAllocator));
     CUDA_CHECK_LAST_ERROR("GFI::equality pool.getBufferOrCreate columnPoolAllocator");
 
     void* _index_table = nullptr;
@@ -661,6 +709,8 @@ void GFI::inequality(
 
                     static_cast<int64_t*>(_col_1),
                     static_cast<int64_t*>(_col_2),
+                    _col_1_nulls,
+                    _col_2_nulls,
                     col_1->data.size(),
                     col_2->data.size(),
 
@@ -684,6 +734,8 @@ void GFI::inequality(
 
                     static_cast<double*>(_col_1),
                     static_cast<double*>(_col_2),
+                    _col_1_nulls,
+                    _col_2_nulls,
                     col_1->data.size(),
                     col_2->data.size(),
 
@@ -707,6 +759,8 @@ void GFI::inequality(
 
                     static_cast<char**>(_col_1),
                     static_cast<char**>(_col_2),
+                    _col_1_nulls,
+                    _col_2_nulls,
                     col_1->data.size(),
                     col_2->data.size(),
 
@@ -730,6 +784,8 @@ void GFI::inequality(
 
                     static_cast<dateTime*>(_col_1),
                     static_cast<dateTime*>(_col_2),
+                    _col_1_nulls,
+                    _col_2_nulls,
                     col_1->data.size(),
                     col_2->data.size(),
 
@@ -760,6 +816,8 @@ void GFI::inequality(
 
                     static_cast<int64_t*>(_col_1),
                     static_cast<int64_t*>(_col_2),
+                    _col_1_nulls,
+                    _col_2_nulls,
                     col_1->data.size(),
                     col_2->data.size(),
 
@@ -780,6 +838,8 @@ void GFI::inequality(
 
                     static_cast<double*>(_col_1),
                     static_cast<double*>(_col_2),
+                    _col_1_nulls,
+                    _col_2_nulls,
                     col_1->data.size(),
                     col_2->data.size(),
 
@@ -800,6 +860,8 @@ void GFI::inequality(
 
                     static_cast<const char**>(_col_1),
                     static_cast<const char**>(_col_2),
+                    _col_1_nulls,
+                    _col_2_nulls,
                     col_1->data.size(),
                     col_2->data.size(),
 
@@ -820,6 +882,8 @@ void GFI::inequality(
 
                     static_cast<dateTime*>(_col_1),
                     static_cast<dateTime*>(_col_2),
+                    _col_1_nulls,
+                    _col_2_nulls,
                     col_1->data.size(),
                     col_2->data.size(),
 
@@ -854,6 +918,8 @@ void GFI::inequality(tensor<char, Device::GPU> *result, column *col_1, tval valu
     std::vector<size_t> tileSize, size_t table_1_index, std::vector<size_t> mask, column::SortedSearchType operation) {
 
     auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
+    auto _col_1_nulls = static_cast<char*>(pool.getBufferOrCreate(static_cast<void*>(&col_1->nulls), static_cast<void*>(col_1), columnNullsAllocator));
+
     CUDA_CHECK_LAST_ERROR("GFI::equality pool.getBufferOrCreate columnPoolAllocator");
 
     auto _mask       = static_cast<size_t*>(cu::vectorToDevice(mask));
@@ -876,6 +942,7 @@ void GFI::inequality(tensor<char, Device::GPU> *result, column *col_1, tval valu
 
                     static_cast<int64_t*>(_col_1),
                     value.i,
+                    _col_1_nulls,
                     col_1->data.size(),
 
                     _mask,
@@ -894,6 +961,7 @@ void GFI::inequality(tensor<char, Device::GPU> *result, column *col_1, tval valu
 
                     static_cast<double*>(_col_1),
                     value.d,
+                    _col_1_nulls,
                     col_1->data.size(),
 
                     _mask,
@@ -912,6 +980,7 @@ void GFI::inequality(tensor<char, Device::GPU> *result, column *col_1, tval valu
 
                     static_cast<const char**>(_col_1),
                     static_cast<const char*>(_sVal),
+                    _col_1_nulls,
                     col_1->data.size(),
 
                     _mask,
@@ -930,6 +999,7 @@ void GFI::inequality(tensor<char, Device::GPU> *result, column *col_1, tval valu
 
                     static_cast<dateTime*>(_col_1),
                     *value.t,
+                    _col_1_nulls,
                     col_1->data.size(),
 
                     _mask,
@@ -979,14 +1049,45 @@ static T run_reducer(T* input, size_t n, __rf func) {
         func<<<1, Cfg::BlockDim, (Cfg::BlockDim * 2) * sizeof(T)>>>(d_block_sums, blocks, final);
         CUDA_CHECK_LAST_ERROR("run_reducer::Reducer_Func (internal)");
         cu::toHost(final, &result, sizeof(T));
+        cu::free(final);
     }
 
     cu::free(d_block_sums);
     return result;
 }
 
+
+template<typename T, typename __nrf>
+static T run_reducer_nulls(T* input, char* nulls, size_t n, __nrf func) {
+    if (n == 0) return static_cast<T>(0);
+    size_t blocks = (n + Cfg::BlockDim * 2 - 1) / (Cfg::BlockDim * 2);
+
+    T    *d_block_sums  = static_cast<T*>(cu::malloc(blocks * sizeof(T)));
+    char *d_block_nulls = static_cast<char*>(cu::malloc(blocks * sizeof(char)));
+    func<<<blocks, Cfg::BlockDim, (Cfg::BlockDim * 2) * sizeof(T)>>>(input, nulls, n, d_block_sums, d_block_nulls);
+    CUDA_CHECK_LAST_ERROR("run_reducer_nulls::Reducer_Func");
+
+    T result{};
+
+    if (blocks > Cfg::BlockDim * 2) {
+        result = run_reducer_nulls<T, __nrf>(d_block_sums, nulls, blocks, func);
+        CUDA_CHECK_LAST_ERROR("run_reducer_nulls::recursive");
+    } else {
+        T* final = static_cast<T*>(cu::malloc(sizeof(T)));
+        func<<<1, Cfg::BlockDim, (Cfg::BlockDim * 2) * sizeof(T)>>>(d_block_sums, d_block_nulls , blocks, final, nullptr);
+        CUDA_CHECK_LAST_ERROR("run_reducer_nulls::Reducer_Func (internal)");
+        cu::toHost(final, &result, sizeof(T));
+        cu::free(final);
+    }
+
+    cu::free(d_block_sums);
+    cu::free(d_block_nulls);
+    return result;
+}
+
 tval GFI::max(column *col_1) {
     auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
+    auto _col_1_nulls = static_cast<char*>(pool.getBufferOrCreate(static_cast<void*>(&col_1->nulls), static_cast<void*>(col_1), columnNullsAllocator));
     CUDA_CHECK_LAST_ERROR("GFI::equality pool.getBufferOrCreate columnPoolAllocator");
 
     const char* devPtr = nullptr;
@@ -998,16 +1099,16 @@ tval GFI::max(column *col_1) {
     tval result;
     switch (col_1->type) {
         case INTEGER:
-            result = ValuesHelper::create_from(run_reducer(static_cast<int64_t*>(_col_1), col_1->data.size(), ReduceKernel::max<int64_t>));
+            result = ValuesHelper::create_from(run_reducer_nulls(static_cast<int64_t*>(_col_1), _col_1_nulls, col_1->data.size(), ReduceKernel::max_nulls<int64_t>));
             break;
         case FLOAT:
-            result = ValuesHelper::create_from(run_reducer(static_cast<double*>(_col_1), col_1->data.size(), ReduceKernel::max<double>));
+            result = ValuesHelper::create_from(run_reducer_nulls(static_cast<double*>(_col_1), _col_1_nulls, col_1->data.size(), ReduceKernel::max_nulls<double>));
             break;
         case DateTime:
-            result = ValuesHelper::create_from(run_reducer(static_cast<dateTime*>(_col_1), col_1->data.size(), ReduceKernel::max<dateTime>));
+            result = ValuesHelper::create_from(run_reducer_nulls(static_cast<dateTime*>(_col_1), _col_1_nulls, col_1->data.size(), ReduceKernel::max_nulls<dateTime>));
             break;
         case STRING:
-            devPtr  = run_reducer(static_cast<const char**>(_col_1), col_1->data.size(), ReduceKernel::max<const char*>);
+            devPtr  = run_reducer_nulls(static_cast<const char**>(_col_1), _col_1_nulls, col_1->data.size(), ReduceKernel::max_nulls<const char*>);
             HelperKernels::strlen<<<1, 1>>>(devPtr, devSizePtr);
             cudaDeviceSynchronize();
             cu::toHost(devSizePtr, hostSizePtr, sizeof(size_t));
@@ -1029,6 +1130,7 @@ tval GFI::max(column *col_1) {
 
 tval GFI::min(column *col_1) {
     auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
+    auto _col_1_nulls = static_cast<char*>(pool.getBufferOrCreate(static_cast<void*>(&col_1->nulls), static_cast<void*>(col_1), columnNullsAllocator));
     CUDA_CHECK_LAST_ERROR("GFI::min pool.getBufferOrCreate columnPoolAllocator");
 
     const char* devPtr = nullptr;
@@ -1040,16 +1142,16 @@ tval GFI::min(column *col_1) {
     tval result;
     switch (col_1->type) {
         case INTEGER:
-            result = ValuesHelper::create_from(run_reducer(static_cast<int64_t*>(_col_1), col_1->data.size(), ReduceKernel::min<int64_t>));
+            result = ValuesHelper::create_from(run_reducer_nulls(static_cast<int64_t*>(_col_1), _col_1_nulls, col_1->data.size(), ReduceKernel::min_nulls<int64_t>));
             break;
         case FLOAT:
-            result = ValuesHelper::create_from(run_reducer(static_cast<double*>(_col_1), col_1->data.size(), ReduceKernel::min<double>));
+            result = ValuesHelper::create_from(run_reducer_nulls(static_cast<double*>(_col_1), _col_1_nulls, col_1->data.size(), ReduceKernel::min_nulls<double>));
             break;
         case DateTime:
-            result = ValuesHelper::create_from(run_reducer(static_cast<dateTime*>(_col_1), col_1->data.size(), ReduceKernel::min<dateTime>));
+            result = ValuesHelper::create_from(run_reducer_nulls(static_cast<dateTime*>(_col_1), _col_1_nulls, col_1->data.size(), ReduceKernel::min_nulls<dateTime>));
             break;
         case STRING:
-            devPtr  = run_reducer(static_cast<const char**>(_col_1), col_1->data.size(), ReduceKernel::min<const char*>);
+            devPtr  = run_reducer_nulls(static_cast<const char**>(_col_1), _col_1_nulls, col_1->data.size(), ReduceKernel::min_nulls<const char*>);
             HelperKernels::strlen<<<1, 1>>>(devPtr, devSizePtr);
             cudaDeviceSynchronize();
             cu::toHost(devSizePtr, hostSizePtr, sizeof(size_t));
@@ -1073,20 +1175,22 @@ tval GFI::sum(column *col_1) {
     if (col_1->type == STRING) throw std::runtime_error("Unsupported column type");
 
     auto _col_1 = pool.getBufferOrCreate(static_cast<void*>(col_1), static_cast<void*>(col_1), columnPoolAllocator);
+    auto _col_1_nulls = static_cast<char*>(pool.getBufferOrCreate(static_cast<void*>(&col_1->nulls), static_cast<void*>(col_1), columnNullsAllocator));
     CUDA_CHECK_LAST_ERROR("GFI::sum pool.getBufferOrCreate columnPoolAllocator");
 
     CUDA_CHECK(cudaDeviceSynchronize());
+
     tval result;
     switch (col_1->type) {
         case INTEGER:
-            result = ValuesHelper::create_from(run_reducer(static_cast<int64_t*>(_col_1), col_1->data.size(), ReduceKernel::sum<int64_t>));
-        break;
+            result = ValuesHelper::create_from(run_reducer_nulls(static_cast<int64_t*>(_col_1), _col_1_nulls, col_1->data.size(), ReduceKernel::sum_nulls<int64_t>));
+            break;
         case FLOAT:
-            result = ValuesHelper::create_from(run_reducer(static_cast<double*>(_col_1), col_1->data.size(), ReduceKernel::sum<double>));
-        break;
+            result = ValuesHelper::create_from(run_reducer_nulls(static_cast<double*>(_col_1), _col_1_nulls, col_1->data.size(), ReduceKernel::sum_nulls<double>));
+            break;
         case DateTime:
-            result = ValuesHelper::create_from(run_reducer(static_cast<dateTime*>(_col_1), col_1->data.size(), ReduceKernel::sum<dateTime>));
-        break;
+            result = ValuesHelper::create_from(run_reducer_nulls(static_cast<dateTime*>(_col_1), _col_1_nulls, col_1->data.size(), ReduceKernel::sum_nulls<dateTime>));
+            break;
         default:
             throw std::runtime_error("Unsupported column type");
     }
@@ -1098,19 +1202,18 @@ tval GFI::avg(column *col_1) {
     auto _s = sum(col_1);
     switch (col_1->type) {
         case INTEGER:
-            _s.d = static_cast<float>(_s.i) / col_1->data.size();
+            _s.d = static_cast<float>(_s.i) / (col_1->data.size() - col_1->nullsCount);
             break;
         case FLOAT:
-            _s.d = _s.d / col_1->data.size();
+            _s.d = _s.d / (col_1->data.size() - col_1->nullsCount);
             break;
         case DateTime:
-            throw std::runtime_error("Unsupported column type"); // fixme: maybe ?
-            _s.t->day = _s.t->day / col_1->data.size();
-            _s.t->month = _s.t->month / col_1->data.size();
-            _s.t->year = _s.t->year / col_1->data.size();
-            _s.t->hour = _s.t->hour / col_1->data.size();
-            _s.t->minute = _s.t->minute / col_1->data.size();
-            _s.t->second = _s.t->second / col_1->data.size();
+            _s.t->day = _s.t->day / (col_1->data.size() - col_1->nullsCount);
+            _s.t->month = _s.t->month / (col_1->data.size() - col_1->nullsCount);
+            _s.t->year = _s.t->year / (col_1->data.size() - col_1->nullsCount);
+            _s.t->hour = _s.t->hour / (col_1->data.size() - col_1->nullsCount);
+            _s.t->minute = _s.t->minute / (col_1->data.size() - col_1->nullsCount);
+            _s.t->second = _s.t->second / (col_1->data.size() - col_1->nullsCount);
             break;
         default:
             break;

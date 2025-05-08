@@ -288,3 +288,4 @@ __global__ void EqualityKernel::equality_kernel_time(char *result, size_t dataSi
         result[TensorKernel::map(pos, tileShape, tablesCount)] = 1;
     }
 }
+

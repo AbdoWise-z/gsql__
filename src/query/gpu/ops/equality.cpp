@@ -179,6 +179,7 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
                     result,
                     column_ptr,
                     value,
+                    false,
                     tile_start,
                     tile_size,
                     table_index,

@@ -7,6 +7,7 @@
 #include <csv.hpp>
 #include <iomanip>
 #include <hsql/sql/ColumnType.h>
+#include <omp.h>
 
 
 static std::vector<DataType> inferTypes(const csv::CSVRow& row) {
@@ -226,12 +227,16 @@ table * DBHelper::fromCSV_Unchecked(std::string path) {
 
     for (int i = 0;i < types.size();i++) {
         // pre-reserve anything that we need
-        table->columns[i]->data = std::vector<tval>(lines.size() - 1, {nullptr});
+        table->columns[i]->data  = std::vector<tval>(lines.size() - 1, {nullptr});
+        table->columns[i]->nulls = std::vector<char>(lines.size() - 1, 0);
     }
 
+    int nThreads = omp_get_max_threads();
+    std::vector localNulls(nThreads, std::vector<std::int64_t>(table->columns.size(), 0));
     // shared(lines, types, table, path, ValuesHelper::DefaultIntegerValue, ValuesHelper::DefaultFloatValue, ValuesHelper::DefaultDateTimeValue)
     #pragma omp parallel for schedule(static)
     for (size_t i = 1; i < lines.size(); i++) {
+        int tid = omp_get_thread_num();
         auto vals = parseCSVLine(lines[i]);
 
         if (types.size() != vals.size()) {
@@ -243,12 +248,14 @@ table * DBHelper::fromCSV_Unchecked(std::string path) {
 
         for (size_t j = 0; j < types.size(); j++) {
             tval value{};
+            char nil = 0;
             switch (types[j]) {
                 case INTEGER:
                     try {
                         value = ValuesHelper::create_from(static_cast<int64_t>(std::stoll(vals[j])));
                     } catch (...) {
                         value = ValuesHelper::create_from(ValuesHelper::DefaultIntegerValue);
+                        nil = 1;
                     }
                     break;
                 case FLOAT:
@@ -256,13 +263,15 @@ table * DBHelper::fromCSV_Unchecked(std::string path) {
                         value = ValuesHelper::create_from(std::stod(vals[j]));
                     } catch (...) {
                         value = ValuesHelper::create_from(ValuesHelper::DefaultFloatValue);
+                        nil = 1;
                     }
                     break;
                 case DateTime:
                     try {
-                        value = ValuesHelper::create_from(ValuesHelper::parseDateTime(vals[j]).value());
+                        value = ValuesHelper::create_from(ValuesHelper::parseDateTime(vals[j], false).value());
                     } catch (...) {
                         value = ValuesHelper::create_from(ValuesHelper::DefaultDateTimeValue);
+                        nil = 1;
                     }
                     break;
                 case STRING:
@@ -270,16 +279,29 @@ table * DBHelper::fromCSV_Unchecked(std::string path) {
                     break;
             }
 
-            table->columns[j]->data[i - 1] = value;
+            table->columns[j]->data[i - 1]  = value;
+            table->columns[j]->nulls[i - 1] = nil;
+
+            if (nil) {
+                localNulls[tid][j]++;
+            }
+        }
+    }
+
+    for (int t = 0; t < nThreads; ++t) {
+        for (size_t j = 0; j < table->columns.size(); ++j) {
+            table->columns[j]->nullsCount += localNulls[t][j];
         }
     }
 
     return table;
 }
 
-static std::string asString(const tval &value, DataType type)
+static std::string asString(const tval &value, DataType type, bool isNull)
 {
     std::string result;
+
+    if (isNull) return "";
 
     switch (type)
     {
@@ -347,7 +369,7 @@ bool DBHelper::toCSV(table *t, const std::string& path) {
     for (size_t rowIdx = 0; rowIdx < rowCount; ++rowIdx){
         for (size_t colIdx = 0; colIdx < headers.size(); ++colIdx){
             auto type = cols[colIdx]->type;
-            std::string value = asString(cols[colIdx]->data[rowIdx], type);
+            std::string value = asString(cols[colIdx]->data[rowIdx], type, cols[colIdx]->nulls.size() > rowIdx ? cols[colIdx]->nulls[rowIdx] != 0 : false);
             out << value;
 
             if (colIdx < headers.size() - 1)

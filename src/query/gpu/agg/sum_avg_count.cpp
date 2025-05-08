@@ -75,7 +75,8 @@ tval Agg::GPU::avg(column *col) {
     //
     // return ValuesHelper::create_from("ERROR IN AGG SUM");
 
-    if (col->data.size() == 0) {
+    auto size = col->data.size() - col->nullsCount;
+    if (size == 0) {
         switch (col->type) {
             case STRING:
                 return ValuesHelper::create_from("");
@@ -92,7 +93,7 @@ tval Agg::GPU::avg(column *col) {
 }
 
 tval Agg::GPU::count(const column *col) {
-    return ValuesHelper::create_from(static_cast<int64_t>(col->data.size()));
+    return ValuesHelper::create_from(static_cast<int64_t>(col->data.size() - col->nullsCount));
 }
 
 tval Agg::GPU::count(const table *t) {

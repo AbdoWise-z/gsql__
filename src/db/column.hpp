@@ -20,10 +20,13 @@ public:
     std::vector<std::vector<size_t>> hashed;
     size_t hashExSize;
 
+    size_t nullsCount;
+
     void buildSortedIndexes ();
     void buildHashedIndexes (int ex_size);
 
     [[nodiscard]] std::vector<size_t> hashSearch(tval) const;
+    [[nodiscard]] std::vector<size_t> nullsSearch() const;
 
     enum SortedSearchType {
         SST_GT,

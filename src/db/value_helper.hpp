@@ -83,7 +83,7 @@ namespace ValuesHelper {
     }
 
     inline int64_t dateTimeToInt(dateTime a) {
-        return a.year * 33177600 + a.month * 2764800 + a.day * 86000 + a.hour * 3600 + a.minute * 60 + a.second;
+        return a.year * 33177600LL + a.month * 2764800LL + a.day * 86000LL + a.hour * 3600LL + a.minute * 60LL + a.second;
     }
 
     inline dateTime dateTimeFromInt(int64_t i) {

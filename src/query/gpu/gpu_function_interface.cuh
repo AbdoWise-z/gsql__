@@ -63,6 +63,7 @@ namespace GFI {
         tensor<char, Device::GPU> *result,
         column *col_1,
         tval value,
+        bool isNull,
 
         std::vector<size_t> tileOffset,
         std::vector<size_t> tileSize,

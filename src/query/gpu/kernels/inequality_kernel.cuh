@@ -6,6 +6,7 @@
 #define INEQUALITY_KERNEL_CUH
 
 #include "tensor_kernels.cuh"
+#include "../../../../../../../../../usr/lib/gcc/x86_64-linux-gnu/13/include/float.h"
 #include "db/column.hpp"
 #include "db/value_helper.hpp"
 
@@ -63,13 +64,13 @@ namespace InequalityKernel {
     ///
     /// @see values_helper.hpp#dateTimeToInt
     __device__ inline int64_t dateTimeToInt(dateTime a) {
-        return a.year * 33177600 + a.month * 2764800 + a.day * 86000 + a.hour * 3600 + a.minute * 60 + a.second;
+        return a.year * 33177600LL + a.month * 2764800LL + a.day * 86000LL + a.hour * 3600LL + a.minute * 60LL + a.second;
     }
 
     __device__ inline int cmp(const dateTime& a, const dateTime& b) {
         int64_t a_v = dateTimeToInt(a);
         int64_t b_v = dateTimeToInt(b);
-        return 1 * (a_v > b_v) + -1 * (a_v < b_v);
+        return cmp(a_v, b_v);
     }
 
 
@@ -170,6 +171,94 @@ namespace InequalityKernel {
         }
     }
 
+
+    /// ===========================
+    /// Sort Accelerated Kernels, null support
+    /// ===========================
+    template<typename T>
+    __global__ void inequality_kernel(
+        // result params
+        char* result,
+        size_t dataSize,
+        size_t tablesCount,
+
+        // data params
+        const T* col_1,
+        const T* col_2,
+        const char* col_1_nulls,
+        const char* col_2_nulls,
+        size_t  col_1_size,
+        size_t  col_2_size,
+
+        // sort params
+        const size_t* sorted_index,
+
+        // masking params
+        size_t *mask,
+        size_t table_1_i,
+        size_t table_2_i,
+
+        // tiling params
+        size_t* tileShape,
+        size_t* tileOffset,
+
+        // actual operation
+        column::SortedSearchType operation
+    ) {
+        size_t index = blockIdx.x * blockDim.x + threadIdx.x;
+
+        if (index >= tileShape[table_1_i]) return;
+
+        auto col1_index = index + tileOffset[table_1_i];
+        if (col1_index >= col_1_size) return;
+
+        auto val = col_1[col1_index];
+
+        if (col_1_nulls[col1_index]) return; // nulls are not to be used in inequalities
+
+        size_t pos[MAX_TENSOR_DIMS];
+
+        for (int i = 0;i < tablesCount; i++) {
+            pos[i] = 0; // store the data in the zero-th plain
+        }
+
+        pos[table_1_i] = col1_index - tileOffset[table_1_i];
+
+        // search logic
+        if (operation == column::SST_GT) { // col_1 > col_2
+            auto start = upper_bound(col_2, sorted_index, col_2_size, val);
+            while (start >= 0) {
+                auto col2_index = sorted_index[start];
+
+                if (col2_index < tileOffset[table_2_i] || col2_index >= tileOffset[table_2_i] + tileShape[table_2_i]) {
+                    continue;
+                }
+
+                if (col_2_nulls[col2_index]) continue;
+
+                pos[table_2_i] = sorted_index[start] - tileOffset[table_2_i];
+
+                result[TensorKernel::map(pos, tileShape, tablesCount)] = 1;
+                --start;
+            }
+        } else { // must be less than
+            auto start = lower_bound(col_2, sorted_index, col_2_size, val);
+            while (start < col_2_size) {
+                auto col2_index = sorted_index[start];
+
+                if (col2_index < tileOffset[table_2_i] || col2_index >= tileOffset[table_2_i] + tileShape[table_2_i]) {
+                    continue;
+                }
+
+                if (col_2_nulls[col2_index]) continue;
+
+                pos[table_2_i] = sorted_index[start] - tileOffset[table_2_i];
+                result[TensorKernel::map(pos, tileShape, tablesCount)] = 1;
+                ++start;
+            }
+        }
+    }
+
     /// ===========================
     /// Normal Kernels (2D)
     /// ===========================
@@ -231,6 +320,70 @@ namespace InequalityKernel {
 
 
     /// ===========================
+    /// Normal Kernels (2D), null support
+    /// ===========================
+    template<typename T>
+    __global__ void inequality_kernel(
+        // result params
+        char* result,
+        size_t dataSize,
+        size_t tablesCount,
+
+        // data params
+        const T* col_1,
+        const T* col_2,
+        const char* col_1_nulls,
+        const char* col_2_nulls,
+        size_t  col_1_size,
+        size_t  col_2_size,
+
+        // masking params
+        size_t *mask,
+        size_t table_1_i,
+        size_t table_2_i,
+
+        // tiling params
+        size_t* tileShape,
+        size_t* tileOffset,
+
+        // actual operation
+        column::SortedSearchType operation
+    ) {
+        size_t iTh = blockIdx.x * blockDim.x + threadIdx.x;
+        size_t jTh = blockIdx.y * blockDim.y + threadIdx.y;
+
+        if (iTh >= tileShape[table_1_i]) return;
+        if (jTh >= tileShape[table_2_i]) return;
+
+        auto col1_index = iTh + tileOffset[table_1_i];
+        if (col1_index >= col_1_size) return;
+
+        auto col2_index = jTh + tileOffset[table_2_i];
+        if (col2_index >= col_2_size) return;
+
+        auto val1 = col_1[col1_index];
+        auto val2 = col_2[col2_index];
+
+        if (col_1_nulls[col1_index] || col_2_nulls[col2_index]) return;
+
+        size_t pos[MAX_TENSOR_DIMS];
+
+        for (int i = 0;i < tablesCount; i++) {
+            pos[i] = 0; // store the data in the zero-th plain
+        }
+
+        pos[table_1_i] = col1_index - tileOffset[table_1_i];
+        pos[table_2_i] = col2_index - tileOffset[table_2_i];
+
+        auto cmp_value = InequalityKernel::cmp(val1, val2);
+
+        if (cmp_value > 0 && operation == column::SST_GT || cmp_value < 0 && operation == column::SST_LT) {
+            result[TensorKernel::map(pos, tileShape, tablesCount)] = 1;
+        }
+    }
+
+
+    /// ===========================
     /// Normal Kernels (1D - Col , literal)
     /// ===========================
     template<typename T>
@@ -264,6 +417,60 @@ namespace InequalityKernel {
         if (col1_index >= col_1_size) return;
 
         auto val1 = col_1[col1_index];
+
+        size_t pos[MAX_TENSOR_DIMS];
+
+        for (int i = 0; i < tablesCount; i++) {
+            pos[i] = 0; // store the data in the zero-th plain
+        }
+
+        pos[table_1_i] = col1_index - tileOffset[table_1_i];
+
+        auto cmp_value = InequalityKernel::cmp(val1, literal);
+
+        if (cmp_value > 0 && operation == column::SST_GT || cmp_value < 0 && operation == column::SST_LT) {
+            result[TensorKernel::map(pos, tileShape, tablesCount)] = 1;
+        }
+    }
+
+
+    /// ===========================
+    /// Normal Kernels (1D - Col , literal)
+    /// ===========================
+    template<typename T>
+    __global__ void inequality_kernel(
+        // result params
+        char *result,
+        size_t dataSize,
+        size_t tablesCount,
+
+        // data params
+        const T *col_1,
+        const T literal,
+        const char* col_1_nulls,
+        size_t col_1_size,
+
+        // masking params
+        size_t *mask,
+        size_t table_1_i,
+
+        // tiling params
+        size_t *tileShape,
+        size_t *tileOffset,
+
+        // actual operation
+        column::SortedSearchType operation
+    ) {
+        size_t iTh = blockIdx.x * blockDim.x + threadIdx.x;
+
+        if (iTh >= tileShape[table_1_i]) return;
+
+        auto col1_index = iTh + tileOffset[table_1_i];
+        if (col1_index >= col_1_size) return;
+
+        auto val1 = col_1[col1_index];
+
+        if (col_1_nulls[col1_index]) return;
 
         size_t pos[MAX_TENSOR_DIMS];
 

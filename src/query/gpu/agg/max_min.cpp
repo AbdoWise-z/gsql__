@@ -35,7 +35,8 @@ tval Agg::GPU::max(column *col) {
     //     return ValuesHelper::create_from(_max);
     // }
 
-    if (col->data.size() == 0) {
+    auto size = col->data.size() - col->nullsCount;
+    if (size == 0) {
         switch (col->type) {
             case STRING:
                 return ValuesHelper::create_from("");
@@ -96,7 +97,8 @@ tval Agg::GPU::min(column *col) {
 //
 //     return ValuesHelper::create_from("ERROR IN AGG MIN");
 
-    if (col->data.size() == 0) {
+    auto size = col->data.size() - col->nullsCount;
+    if (size) {
         switch (col->type) {
             case STRING:
                 return ValuesHelper::create_from("");

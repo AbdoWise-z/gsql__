@@ -8,6 +8,7 @@
 #include "ops/greater_than.hpp"
 #include "ops/logical_and.hpp"
 #include "ops/logical_or.hpp"
+#include "ops/null_equality.hpp"
 #include "query/errors.hpp"
 
 // #define FILTER_DEBUG
@@ -87,6 +88,17 @@ tensor<char, Device::GPU>* FilterApplier::GPU::apply(
 
         if (op == hsql::kOpNotEquals) {
             auto t2 = Ops::GPU::equality(input_data, eval, limit, tile_start, tile_size);
+            auto result = new tensor<char, Device::GPU>(!*t2);
+            delete t2;
+            return result;
+        }
+
+        if (op == hsql::kOpIsNull) {
+            return Ops::GPU::null_equality(input_data, eval, limit, tile_start, tile_size);
+        }
+
+        if (op == hsql::kOpNot) {
+            auto t2 = apply(input_data, eval->expr, limit, tile_start, tile_size);
             auto result = new tensor<char, Device::GPU>(!*t2);
             delete t2;
             return result;

@@ -28,6 +28,7 @@ void column::buildHashedIndexes(int ex_size) {
     }
 
     for (int i = 0;i < data.size(); i++) {
+        if (nulls.size() > i && nulls[i]) continue;    // don't hash null values (sort is ok tho ..)
         auto hash_v = ValuesHelper::hash(data[i], type);
         hash_v = hash_v % data.size();
 
@@ -50,6 +51,15 @@ std::vector<size_t> column::hashSearch(const tval v) const {
             }
         }
         hash_v = (hash_v + 1) % data.size();
+    }
+
+    return result;
+}
+
+std::vector<size_t> column::nullsSearch() const {
+    std::vector<size_t> result;
+    for (size_t i = 0;i < nulls.size(); i++) {
+        if (nulls[i]) result.push_back(i);
     }
 
     return result;
@@ -117,10 +127,14 @@ column* column::copy() const {
     auto result = new column();
     result->type = type;
     result->data.resize(data.size());
+    result->nulls.resize(data.size());
 
     for (auto i = 0;i < data.size();i++) {
         result->data[i] = ValuesHelper::copy(data[i], type);
+        result->nulls[i] = nulls[i];
     }
+
+    result->nullsCount = nullsCount;
 
     return result;
 }
