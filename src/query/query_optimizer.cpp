@@ -28,6 +28,15 @@ namespace QueryOptimizer {
                 return "=";
             case hsql::kOpNotEquals:
                 return "!=";
+            case hsql::kOpMinus:
+            case hsql::kOpUnaryMinus:
+                return "-";
+            case hsql::kOpPlus:
+                return "+";
+            case hsql::kOpAsterisk:
+                return "*";
+            case hsql::kOpSlash:
+                return "/";
             default: ;
         }
 

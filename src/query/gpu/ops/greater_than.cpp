@@ -40,7 +40,7 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
 
     auto* result = new tensor<char, Device::GPU>(result_size);
 
-    if (left->isLiteral() && right->isLiteral()) {
+    if (left->type != hsql::kExprColumnRef && right->type != hsql::kExprColumnRef) {
 #ifdef OP_GREATER_DEBUG
         std::cout << "kExprOperator::Greater two literals" << std::endl;
 #endif
@@ -67,7 +67,7 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
 
     result->setAll(0);
 
-    if (left->isLiteral() || right->isLiteral()) {
+    if (left->type != hsql::kExprColumnRef || right->type != hsql::kExprColumnRef) {
 #ifdef OP_GREATER_DEBUG
         std::cout << "kExprOperator::Greater one literal" << std::endl;
 #endif
@@ -76,7 +76,7 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
         hsql::Expr* col;
         bool literal_on_left = false;
 
-        if (left->isLiteral()) {
+        if (left->type != hsql::kExprColumnRef) {
             literal = left;
             col = right;
             literal_on_left = true;

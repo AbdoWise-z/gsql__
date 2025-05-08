@@ -260,6 +260,27 @@ std::optional<dateTime> ValuesHelper::parseDateTime(const std::string &input, bo
     return dt;
 }
 
+static std::pair<std::pair<tval, tval>, DataType> resolveBinaryOp(hsql::Expr * literal) {
+    auto inner1 = ValuesHelper::getLiteralFrom(literal->expr);
+    auto inner2 = ValuesHelper::getLiteralFrom(literal->expr2);
+    auto common = ValuesHelper::conversionMap[{inner1.second, inner2.second}];
+    if (common != inner1.second) {
+        const auto temp = inner1;
+        inner1.first = ValuesHelper::castTo(temp.first, inner1.second, common);
+        ValuesHelper::deleteValue(temp.first, temp.second);
+        inner1.second = common;
+    }
+
+    if (common != inner2.second) {
+        const auto temp = inner2;
+        inner2.first = ValuesHelper::castTo(temp.first, inner2.second, common);
+        ValuesHelper::deleteValue(temp.first, temp.second);
+        inner2.second = common;
+    }
+
+    return {{inner1.first, inner2.first}, common};
+}
+
 std::pair<tval, DataType> ValuesHelper::getLiteralFrom(hsql::Expr * literal) {
     tval literal_v {};
     DataType literal_t = STRING;
@@ -272,19 +293,182 @@ std::pair<tval, DataType> ValuesHelper::getLiteralFrom(hsql::Expr * literal) {
             literal_v = ValuesHelper::create_from(literal->name);
             literal_t = STRING;
         }
-    }
-
-    if (literal->type == hsql::ExprType::kExprLiteralInt) {
+    } else if (literal->type == hsql::ExprType::kExprLiteralInt) {
         literal_t = INTEGER;
         literal_v = ValuesHelper::create_from(literal->ival);
-    }
-
-    if (literal->type == hsql::ExprType::kExprLiteralFloat) {
+    } else if (literal->type == hsql::ExprType::kExprLiteralFloat) {
         literal_t = FLOAT;
         literal_v = ValuesHelper::create_from(literal->fval);
+    } else if (literal->type == hsql::kExprOperator) {
+        if (literal->opType == hsql::kOpUnaryMinus) {
+            auto inner = getLiteralFrom(literal->expr);
+            auto result = neg(inner.first, inner.second);
+            ValuesHelper::deleteValue(inner.first, inner.second);
+            literal_v = result;
+            literal_t = inner.second;
+        } else if (literal->opType == hsql::kOpPlus) {
+            auto inner = resolveBinaryOp(literal);
+            auto res = add(inner.first.first, inner.first.second, inner.second);
+            ValuesHelper::deleteValue(inner.first.first, inner.second);
+            ValuesHelper::deleteValue(inner.first.second, inner.second);
+            return {res, inner.second};
+        } else if (literal->opType == hsql::kOpMinus) {
+            auto inner = resolveBinaryOp(literal);
+            auto res = sub(inner.first.first, inner.first.second, inner.second);
+            ValuesHelper::deleteValue(inner.first.first, inner.second);
+            ValuesHelper::deleteValue(inner.first.second, inner.second);
+            return {res, inner.second};
+        } else if (literal->opType == hsql::kOpAsterisk) {
+            auto inner = resolveBinaryOp(literal);
+            auto res = mul(inner.first.first, inner.first.second, inner.second);
+            ValuesHelper::deleteValue(inner.first.first, inner.second);
+            ValuesHelper::deleteValue(inner.first.second, inner.second);
+            return {res, inner.second};
+        } else if (literal->opType == hsql::kOpSlash) {
+            auto inner = resolveBinaryOp(literal);
+            auto res = div(inner.first.first, inner.first.second, inner.second);
+            ValuesHelper::deleteValue(inner.first.first, inner.second);
+            ValuesHelper::deleteValue(inner.first.second, inner.second);
+            return {res, inner.second};
+        } else {
+            throw UnsupportedOperatorError(std::to_string(literal->opType));
+        }
+    } else {
+        throw UnsupportedLiteralError();
     }
 
     return {literal_v, literal_t};
+}
+
+tval ValuesHelper::add(tval a, tval b, DataType t) {
+    tval result = {};
+    switch (t) {
+        case INTEGER:
+            result.i = a.i + b.i;
+            break;
+        case FLOAT:
+            result.d = a.d + b.d;
+            break;
+        case DateTime:
+            result.t = new dateTime{};
+            result.t->year = a.t->year + b.t->year;
+            result.t->month = a.t->month + b.t->month;
+            result.t->day = a.t->day + b.t->day;
+            result.t->hour = a.t->hour + b.t->hour;
+            result.t->minute = a.t->minute + b.t->minute;
+            result.t->second = a.t->second + b.t->second;
+            break;
+        case STRING:
+            result.s = new std::string(*a.s + *b.s);
+            break;
+    }
+
+    return result;
+}
+
+tval ValuesHelper::sub(tval a, tval b, DataType t) {
+    tval result = {};
+    switch (t) {
+        case INTEGER:
+            result.i = a.i - b.i;
+            break;
+        case FLOAT:
+            result.d = a.d - b.d;
+            break;
+        case DateTime:
+            result.t = new dateTime{};
+            result.t->year = a.t->year - b.t->year;
+            result.t->month = a.t->month - b.t->month;
+            result.t->day = a.t->day - b.t->day;
+            result.t->hour = a.t->hour - b.t->hour;
+            result.t->minute = a.t->minute - b.t->minute;
+            result.t->second = a.t->second - b.t->second;
+            break;
+        case STRING:
+            throw UnsupportedOperatorError(" string - string is not a thing. ");
+            break;
+    }
+
+    return result;
+}
+
+
+tval ValuesHelper::mul(tval a, tval b, DataType t) {
+    tval result = {};
+    switch (t) {
+        case INTEGER:
+            result.i = a.i * b.i;
+            break;
+        case FLOAT:
+            result.d = a.d * b.d;
+            break;
+        case DateTime:
+            result.t = new dateTime{};
+            result.t->year = a.t->year * b.t->year;
+            result.t->month = a.t->month * b.t->month;
+            result.t->day = a.t->day * b.t->day;
+            result.t->hour = a.t->hour * b.t->hour;
+            result.t->minute = a.t->minute * b.t->minute;
+            result.t->second = a.t->second * b.t->second;
+            break;
+        case STRING:
+            throw UnsupportedOperatorError(" string * string is not a thing. ");
+            break;
+    }
+
+    return result;
+}
+
+tval ValuesHelper::div(tval a, tval b, DataType t) {
+    tval result = {};
+    switch (t) {
+        case INTEGER:
+            result.i = a.i / b.i;
+            break;
+        case FLOAT:
+            result.d = a.d / b.d;
+            break;
+        case DateTime:
+            result.t = new dateTime{};
+            result.t->year = a.t->year / b.t->year;
+            result.t->month = a.t->month / b.t->month;
+            result.t->day = a.t->day / b.t->day;
+            result.t->hour = a.t->hour / b.t->hour;
+            result.t->minute = a.t->minute / b.t->minute;
+            result.t->second = a.t->second / b.t->second;
+            break;
+        case STRING:
+            throw UnsupportedOperatorError(" string / string is not a thing. ");
+            break;
+    }
+
+    return result;
+}
+
+tval ValuesHelper::neg(tval a, DataType t) {
+    tval result = {};
+    switch (t) {
+        case INTEGER:
+            result.i = - a.i;
+        break;
+        case FLOAT:
+            result.d = - a.d;
+        break;
+        case DateTime:
+            result.t = new dateTime{};
+        result.t->year = -a.t->year;
+        result.t->month = -a.t->month;
+        result.t->day = -a.t->day;
+        result.t->hour = -a.t->hour;
+        result.t->minute = -a.t->minute;
+        result.t->second = -a.t->second;
+        break;
+        case STRING:
+            throw UnsupportedOperatorError(" - string is not a thing. ");
+        break;
+    }
+
+    return result;
 }
 
 

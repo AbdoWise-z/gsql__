@@ -181,6 +181,12 @@ namespace ValuesHelper {
 
     std::pair<tval, DataType> getLiteralFrom(hsql::Expr*);
 
+    tval add(tval, tval, DataType);
+    tval sub(tval, tval, DataType);
+    tval div(tval, tval, DataType);
+    tval mul(tval, tval, DataType);
+    tval neg(tval, DataType);
+
 }
 
 #endif //VALUE_HELPER_HPP

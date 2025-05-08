@@ -43,7 +43,7 @@ tensor<char, Device::GPU> * Ops::GPU::null_equality(
 
     auto col = eval->expr;
 
-    if (col->isLiteral()) {
+    if (col->type != hsql::kExprColumnRef) {
 #ifdef OP_EQUALS_DEBUG
         std::cout << "kExprOperator::null_equality one literal" << std::endl;
 #endif

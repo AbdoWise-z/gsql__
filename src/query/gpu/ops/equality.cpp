@@ -40,7 +40,7 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
     if (!tile_start.empty()) result_offset = tile_start;
 
     auto* result = new tensor<char, Device::GPU>(result_size);
-    if (left->isLiteral() && right->isLiteral()) {
+    if (left->type != hsql::kExprColumnRef && right->type != hsql::kExprColumnRef) {
 #ifdef OP_EQUALS_DEBUG
         std::cout << "kExprOperator::Equals two literals" << std::endl;
 #endif
@@ -68,7 +68,7 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
 
     result->setAll(0);
 
-    if (left->isLiteral() || right->isLiteral()) {
+    if (left->type != hsql::kExprColumnRef || right->type != hsql::kExprColumnRef) {
 #ifdef OP_EQUALS_DEBUG
         std::cout << "kExprOperator::Equals one literal" << std::endl;
 #endif
@@ -76,7 +76,7 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
         hsql::Expr* literal;
         hsql::Expr* col;
 
-        if (left->isLiteral()) {
+        if (left->type != hsql::kExprColumnRef) {
             literal = left;
             col = right;
         } else {
