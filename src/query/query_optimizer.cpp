@@ -4,6 +4,8 @@
 
 #include "query_optimizer.hpp"
 
+#include <cstring>
+
 #include "errors.hpp"
 
 
@@ -92,9 +94,13 @@ namespace QueryOptimizer {
                 os << "NULL";
                 break;
             }
+            case hsql::kExprSelect: {
+                os << "(inner select)";
+                break;
+            }
             default: {
                 // Fallback: if we have a raw name, print it
-                if (strlen(expr->name)) {
+                if (expr->name && strlen(expr->name)) {
                     os << expr->name;
                 }
                 break;

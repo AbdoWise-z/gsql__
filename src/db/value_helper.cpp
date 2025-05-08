@@ -7,6 +7,18 @@
 #include <string>
 #include <regex>
 #include <optional>
+#include <hsql/sql/SelectStatement.h>
+
+#include "query/resolver.hpp"
+
+namespace SelectExecutor {
+    namespace CPU {
+        std::pair<std::set<std::string>, table*> Execute(hsql::SQLStatement *statement, TableMap& tables, FromResolver::ResolveResult inject);
+    }
+    namespace GPU {
+        std::pair<std::set<std::string>, table*> Execute(hsql::SQLStatement *statement, TableMap& tables, FromResolver::ResolveResult inject);
+    }
+}
 
 namespace ValuesHelper {
     dateTime DefaultDateTimeValue = {
@@ -260,9 +272,9 @@ std::optional<dateTime> ValuesHelper::parseDateTime(const std::string &input, bo
     return dt;
 }
 
-static std::pair<std::pair<tval, tval>, DataType> resolveBinaryOp(hsql::Expr * literal) {
-    auto inner1 = ValuesHelper::getLiteralFrom(literal->expr);
-    auto inner2 = ValuesHelper::getLiteralFrom(literal->expr2);
+static std::pair<std::pair<tval, tval>, DataType> resolveBinaryOp(hsql::Expr * literal, const TableMap& global_input, ValuesHelper::Resolver resolver) {
+    auto inner1 = ValuesHelper::getLiteralFrom(literal->expr, false, global_input, resolver);
+    auto inner2 = ValuesHelper::getLiteralFrom(literal->expr2, false, global_input, resolver);
     auto common = ValuesHelper::conversionMap[{inner1.second, inner2.second}];
     if (common != inner1.second) {
         const auto temp = inner1;
@@ -281,7 +293,7 @@ static std::pair<std::pair<tval, tval>, DataType> resolveBinaryOp(hsql::Expr * l
     return {{inner1.first, inner2.first}, common};
 }
 
-std::pair<tval, DataType> ValuesHelper::getLiteralFrom(hsql::Expr * literal, bool strict) {
+std::pair<tval, DataType> ValuesHelper::getLiteralFrom(hsql::Expr * literal, bool strict, TableMap global_input, Resolver resolver) {
     tval literal_v {};
     DataType literal_t = STRING;
     if (literal->type == hsql::ExprType::kExprLiteralString) {
@@ -301,31 +313,31 @@ std::pair<tval, DataType> ValuesHelper::getLiteralFrom(hsql::Expr * literal, boo
         literal_v = ValuesHelper::create_from(literal->fval);
     } else if (literal->type == hsql::kExprOperator) {
         if (literal->opType == hsql::kOpUnaryMinus) {
-            auto inner = getLiteralFrom(literal->expr);
+            auto inner = getLiteralFrom(literal->expr, strict, global_input, resolver);
             auto result = neg(inner.first, inner.second);
             ValuesHelper::deleteValue(inner.first, inner.second);
             literal_v = result;
             literal_t = inner.second;
         } else if (literal->opType == hsql::kOpPlus) {
-            auto inner = resolveBinaryOp(literal);
+            auto inner = resolveBinaryOp(literal, global_input, resolver);
             auto res = add(inner.first.first, inner.first.second, inner.second);
             ValuesHelper::deleteValue(inner.first.first, inner.second);
             ValuesHelper::deleteValue(inner.first.second, inner.second);
             return {res, inner.second};
         } else if (literal->opType == hsql::kOpMinus) {
-            auto inner = resolveBinaryOp(literal);
+            auto inner = resolveBinaryOp(literal, global_input, resolver);
             auto res = sub(inner.first.first, inner.first.second, inner.second);
             ValuesHelper::deleteValue(inner.first.first, inner.second);
             ValuesHelper::deleteValue(inner.first.second, inner.second);
             return {res, inner.second};
         } else if (literal->opType == hsql::kOpAsterisk) {
-            auto inner = resolveBinaryOp(literal);
+            auto inner = resolveBinaryOp(literal, global_input, resolver);
             auto res = mul(inner.first.first, inner.first.second, inner.second);
             ValuesHelper::deleteValue(inner.first.first, inner.second);
             ValuesHelper::deleteValue(inner.first.second, inner.second);
             return {res, inner.second};
         } else if (literal->opType == hsql::kOpSlash) {
-            auto inner = resolveBinaryOp(literal);
+            auto inner = resolveBinaryOp(literal, global_input, resolver);
             auto res = div(inner.first.first, inner.first.second, inner.second);
             ValuesHelper::deleteValue(inner.first.first, inner.second);
             ValuesHelper::deleteValue(inner.first.second, inner.second);
@@ -333,6 +345,21 @@ std::pair<tval, DataType> ValuesHelper::getLiteralFrom(hsql::Expr * literal, boo
         } else {
             throw UnsupportedOperatorError(literal->getName());
         }
+    } else if (literal->type == hsql::ExprType::kExprSelect) {
+        table* t = nullptr;
+        if (resolver == CPU) {
+            t = SelectExecutor::CPU::Execute(literal->select, global_input, {}).second;
+        } else {
+            t = SelectExecutor::GPU::Execute(literal->select, global_input, {}).second;
+        }
+
+        if (t->size() < 1) {
+            throw UnsupportedOperationError("Excepted Sub query to have at least one row.");
+        }
+
+        literal_v = ValuesHelper::copy(t->columns[0]->data[0], t->columns[0]->type);
+        literal_t = t->columns[0]->type;
+        delete t;
     } else {
         throw UnsupportedLiteralError();
     }

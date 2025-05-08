@@ -5,8 +5,10 @@
 #include "equality.hpp"
 
 #include "store.hpp"
+#include "db/value_helper.hpp"
 #include "query/errors.hpp"
 #include "query/gpu/gpu_function_interface.cuh"
+#include "query/gpu/select_executor.hpp"
 
 // #define OP_EQUALS_DEBUG
 
@@ -47,8 +49,8 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
         // both are literal, just check if they are equal
         bool ok = true;
 
-        auto left_ = ValuesHelper::getLiteralFrom(left);
-        auto right_ = ValuesHelper::getLiteralFrom(right);
+        auto left_  = ValuesHelper::getLiteralFrom(left, false, SelectExecutor::GPU::global_input, ValuesHelper::GPU);
+        auto right_ = ValuesHelper::getLiteralFrom(right, false, SelectExecutor::GPU::global_input, ValuesHelper::GPU);
 
         try {
             result->setAll(ValuesHelper::cmp(left_.first, right_.first, left_.second, right_.second) == 0 ? 1 : 0);
@@ -139,7 +141,7 @@ tensor<char, Device::GPU> * Ops::GPU::equality(
                 }
             }
         } else {
-            auto literal_ = ValuesHelper::getLiteralFrom(literal, false);
+            auto literal_ = ValuesHelper::getLiteralFrom(literal, false, SelectExecutor::GPU::global_input, ValuesHelper::GPU);
             try {
                 value = ValuesHelper::castTo(literal_.first, literal_.second, column_ptr->type);
                 ValuesHelper::deleteValue(literal_.first, literal_.second);

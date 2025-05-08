@@ -6,6 +6,8 @@
 
 #include <hsql/sql/SelectStatement.h>
 
+#include "errors.hpp"
+
 
 static void selectResolver(hsql::SelectStatement* stmnt, std::set<std::string>& needs);
 static void exprResolver(hsql::Expr* expr, std::set<std::string>& needs);

@@ -6,7 +6,8 @@
 
 #include <algorithm>
 #include <iomanip>
-#include <c++/12/stdexcept>
+#include <stdexcept>
+#include <vector>
 
 #include "column.hpp"
 #include "utils/konsol.hpp"

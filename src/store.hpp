@@ -5,12 +5,12 @@
 #ifndef STORE_HPP
 #define STORE_HPP
 
-#include <unordered_map>
 #include <string>
-#include "db/table.hpp"
+#include <map>
+#include <set>
 #include <chrono>
-#include <iostream>
-#include <type_traits>
+
+#include "db/table.hpp"
 
 #define time_it(call) \
 ([&]() -> decltype(call) { \

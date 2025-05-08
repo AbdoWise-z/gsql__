@@ -5,7 +5,9 @@
 #include "greater_than.hpp"
 
 #include "store.hpp"
+#include "db/value_helper.hpp"
 #include "query/errors.hpp"
+#include "query/cpu/select_executor.hpp"
 
 
 // #define OP_GREATER_DEBUG
@@ -45,8 +47,8 @@ tensor<char, Device::CPU> * Ops::CPU::greater_than(
 #endif
         bool ok = true;
 
-        auto left_ = ValuesHelper::getLiteralFrom(left);
-        auto right_ = ValuesHelper::getLiteralFrom(right);
+        auto left_ = ValuesHelper::getLiteralFrom(left, false, SelectExecutor::CPU::global_input, ValuesHelper::CPU);
+        auto right_ = ValuesHelper::getLiteralFrom(right, false, SelectExecutor::CPU::global_input, ValuesHelper::CPU);
 
         try {
             result->setAll(ValuesHelper::cmp(left_.first, right_.first, left_.second, right_.second) > 0 ? 1 : 0);
@@ -109,9 +111,9 @@ tensor<char, Device::CPU> * Ops::CPU::greater_than(
 
         auto table_ptr = input_data->tables[table_idx];
         ptrdiff_t pos = std::find(table_ptr->headers.begin(), table_ptr->headers.end(), col_name) - table_ptr->headers.begin();
-        auto column_ptr = table_ptr->columns[pos];
+        auto column_ptr =  table_ptr->columns[pos];
 
-        auto literal_ = ValuesHelper::getLiteralFrom(literal);
+        auto literal_ = ValuesHelper::getLiteralFrom(literal, false, SelectExecutor::CPU::global_input, ValuesHelper::CPU);
         tval value{};
         try {
             value = ValuesHelper::castTo(literal_.first, literal_.second, column_ptr->type);

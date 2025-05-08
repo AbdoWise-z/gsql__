@@ -5,7 +5,9 @@
 #include "equality.hpp"
 
 #include "store.hpp"
+#include "db/value_helper.hpp"
 #include "query/errors.hpp"
+#include "query/cpu/select_executor.hpp"
 
 // #define OP_EQUALS_DEBUG
 
@@ -46,8 +48,8 @@ tensor<char, Device::CPU> * Ops::CPU::equality(
 
         bool ok = true;
 
-        auto left_ = ValuesHelper::getLiteralFrom(left);
-        auto right_ = ValuesHelper::getLiteralFrom(right);
+        auto left_ = ValuesHelper::getLiteralFrom(left, false, SelectExecutor::CPU::global_input, ValuesHelper::CPU);
+        auto right_ = ValuesHelper::getLiteralFrom(right, false, SelectExecutor::CPU::global_input, ValuesHelper::CPU);
 
         try {
             result->setAll(ValuesHelper::cmp(left_.first, right_.first, left_.second, right_.second) == 0 ? 1 : 0);
@@ -137,7 +139,7 @@ tensor<char, Device::CPU> * Ops::CPU::equality(
                 }
             }
         } else {
-            auto literal_ = ValuesHelper::getLiteralFrom(literal, false);
+            auto literal_ = ValuesHelper::getLiteralFrom(literal, false, SelectExecutor::CPU::global_input, ValuesHelper::CPU);
             try {
                 value = ValuesHelper::castTo(literal_.first, literal_.second, column_ptr->type);
                 ValuesHelper::deleteValue(literal_.first, literal_.second);

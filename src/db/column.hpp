@@ -8,7 +8,22 @@
 #include <vector>
 #include "typing.hpp"
 
-union tval;
+struct dateTime {
+    ushort year;
+    ushort month;
+    ushort day;
+
+    u_char hour;
+    u_char minute;
+    u_char second;
+};
+
+union tval {
+    std::string* s;
+    int64_t      i;
+    double       d;
+    dateTime*    t;
+};
 
 class column {
 public:

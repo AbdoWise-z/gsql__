@@ -20,6 +20,10 @@
 
 #define SELECT_DEBUG
 
+namespace SelectExecutor::CPU {
+    TableMap global_input;
+}
+
 std::pair<std::set<std::string>, table*> SelectExecutor::CPU::Execute(hsql::SQLStatement *statement, TableMap& tables, FromResolver::ResolveResult inject) {
 
     const auto* stmnt = dynamic_cast<hsql::SelectStatement*>(statement);
@@ -31,6 +35,8 @@ std::pair<std::set<std::string>, table*> SelectExecutor::CPU::Execute(hsql::SQLS
     if (!from) {
         throw std::runtime_error("idk how you made a select query without a from ...");
     }
+
+    global_input = tables;
 
     // resolve the input
     auto global_query_input = FromResolver::CPU::resolve(from, tables);

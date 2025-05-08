@@ -5,7 +5,9 @@
 #include "greater_than.hpp"
 
 #include "store.hpp"
+#include "db/value_helper.hpp"
 #include "query/errors.hpp"
+#include "query/gpu/select_executor.hpp"
 
 
 // #define OP_GREATER_DEBUG
@@ -46,8 +48,8 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
 #endif
         bool ok = true;
 
-        auto left_ = ValuesHelper::getLiteralFrom(left);
-        auto right_ = ValuesHelper::getLiteralFrom(right);
+        auto left_ = ValuesHelper::getLiteralFrom(left, false, SelectExecutor::GPU::global_input, ValuesHelper::GPU);
+        auto right_ = ValuesHelper::getLiteralFrom(right, false, SelectExecutor::GPU::global_input, ValuesHelper::GPU);
 
         try {
             result->setAll(ValuesHelper::cmp(left_.first, right_.first, left_.second, right_.second) > 0 ? 1 : 0);
@@ -112,7 +114,7 @@ tensor<char, Device::GPU> * Ops::GPU::greater_than(
         ptrdiff_t pos = std::find(table_ptr->headers.begin(), table_ptr->headers.end(), col_name) - table_ptr->headers.begin();
         auto column_ptr = table_ptr->columns[pos];
 
-        auto literal_ = ValuesHelper::getLiteralFrom(literal);
+        auto literal_ = ValuesHelper::getLiteralFrom(literal, false, SelectExecutor::GPU::global_input, ValuesHelper::GPU);
         tval value{};
         try {
             value = ValuesHelper::castTo(literal_.first, literal_.second, column_ptr->type);

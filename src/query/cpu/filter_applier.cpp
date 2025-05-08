@@ -4,6 +4,8 @@
 
 #include "filter_applier.hpp"
 
+#include "select_executor.hpp"
+#include "db/value_helper.hpp"
 #include "ops/equality.hpp"
 #include "ops/greater_than.hpp"
 #include "ops/logical_and.hpp"
@@ -105,7 +107,7 @@ tensor<char, Device::CPU>* FilterApplier::CPU::apply(
         }
 
         auto* result = new tensor<char, Device::CPU>(result_size);
-        auto literal = ValuesHelper::getLiteralFrom(eval);
+        auto literal = ValuesHelper::getLiteralFrom(eval, false, SelectExecutor::CPU::global_input, ValuesHelper::CPU);
 
         result->setAll(ValuesHelper::isZero(literal.first, literal.second) ? 0 : 1);
         ValuesHelper::deleteValue(literal.first, literal.second);
@@ -116,7 +118,7 @@ tensor<char, Device::CPU>* FilterApplier::CPU::apply(
 #endif
 
         auto* result = new tensor<char, Device::CPU>(result_size);
-        auto literal = ValuesHelper::getLiteralFrom(eval);
+        auto literal = ValuesHelper::getLiteralFrom(eval, false, SelectExecutor::CPU::global_input, ValuesHelper::CPU);
 
         result->setAll(ValuesHelper::isZero(literal.first, literal.second) ? 0 : 1);
         ValuesHelper::deleteValue(literal.first, literal.second);

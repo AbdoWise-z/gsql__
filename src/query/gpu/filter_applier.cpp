@@ -4,12 +4,14 @@
 
 #include "filter_applier.hpp"
 
+#include "db/value_helper.hpp"
 #include "ops/equality.hpp"
 #include "ops/greater_than.hpp"
 #include "ops/logical_and.hpp"
 #include "ops/logical_or.hpp"
 #include "ops/null_equality.hpp"
 #include "query/errors.hpp"
+#include "query/gpu/select_executor.hpp"
 
 // #define FILTER_DEBUG
 
@@ -105,7 +107,7 @@ tensor<char, Device::GPU>* FilterApplier::GPU::apply(
         }
 
         auto* result = new tensor<char, Device::GPU>(result_size);
-        auto literal = ValuesHelper::getLiteralFrom(eval);
+        auto literal = ValuesHelper::getLiteralFrom(eval, false, SelectExecutor::GPU::global_input, ValuesHelper::GPU);
 
         result->setAll(ValuesHelper::isZero(literal.first, literal.second) ? 0 : 1);
         ValuesHelper::deleteValue(literal.first, literal.second);
@@ -116,7 +118,7 @@ tensor<char, Device::GPU>* FilterApplier::GPU::apply(
 #endif
 
         auto* result = new tensor<char, Device::GPU>(result_size);
-        auto literal = ValuesHelper::getLiteralFrom(eval);
+        auto literal = ValuesHelper::getLiteralFrom(eval, false, SelectExecutor::GPU::global_input, ValuesHelper::GPU);
 
         result->setAll(ValuesHelper::isZero(literal.first, literal.second) ? 0 : 1);
         ValuesHelper::deleteValue(literal.first, literal.second);

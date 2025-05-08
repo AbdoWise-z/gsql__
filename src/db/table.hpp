@@ -9,8 +9,6 @@
 #include <string>
 
 #include "column.hpp"
-#include "value_helper.hpp"
-
 
 class table {
 public:

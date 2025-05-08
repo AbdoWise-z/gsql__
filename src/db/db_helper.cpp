@@ -8,8 +8,10 @@
 #include <iomanip>
 #include <hsql/sql/ColumnType.h>
 #include <omp.h>
+#include <optional>
 #include <regex>
 
+#include "value_helper.hpp"
 #include "utils/string_utils.hpp"
 
 

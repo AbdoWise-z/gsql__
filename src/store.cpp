@@ -4,6 +4,7 @@
 
 #include "store.hpp"
 
+#include <math.h>
 
 TableMap global_tables;
 

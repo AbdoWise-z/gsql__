@@ -13,6 +13,8 @@
 #include "db/table.hpp"
 
 namespace SelectExecutor::CPU {
+    extern TableMap global_input;
+
     struct ConstructionResult {
         table* result;
         std::vector<std::set<std::string>> col_source;

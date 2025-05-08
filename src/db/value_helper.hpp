@@ -15,25 +15,11 @@
 #include "utils/murmur_hash3.hpp"
 
 #include "constants.hpp"
+#include "store.hpp"
 #include "query/errors.hpp"
 
 
-struct dateTime {
-    ushort year;
-    ushort month;
-    ushort day;
 
-    u_char hour;
-    u_char minute;
-    u_char second;
-};
-
-union tval {
-    std::string* s;
-    int64_t      i;
-    double       d;
-    dateTime*    t;
-};
 
 namespace ValuesHelper {
     int cmp(const int64_t& a, const int64_t& b);
@@ -179,7 +165,12 @@ namespace ValuesHelper {
         return result;
     }
 
-    std::pair<tval, DataType> getLiteralFrom(hsql::Expr*, bool strict = false);
+    enum Resolver {
+        CPU,
+        GPU
+    };
+
+    std::pair<tval, DataType> getLiteralFrom(hsql::Expr*, bool strict = false, TableMap global_input = {}, Resolver resolver = CPU);
 
     tval add(tval, tval, DataType);
     tval sub(tval, tval, DataType);

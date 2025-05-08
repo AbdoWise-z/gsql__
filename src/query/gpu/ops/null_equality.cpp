@@ -5,6 +5,7 @@
 #include "null_equality.hpp"
 
 #include "store.hpp"
+#include "db/value_helper.hpp"
 #include "query/errors.hpp"
 #include "query/gpu/gpu_function_interface.cuh"
 
