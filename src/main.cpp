@@ -501,12 +501,14 @@ int main(int argc, char** argv) {
 
             }
         } else {
-            auto output_path = data_folder / fs::path("team6.csv");
+            auto qf_name = fs::path(query_file).filename();
+            auto query_name = qf_name.string().substr(0, qf_name.string().length() - (qf_name.has_extension() ? qf_name.extension().string().length() : 0));
+            auto output_path = "Team6_" + query_name + ".csv";
             global_tables[{"__team_6__query_result__"}] = r_vec[0];
             if (fs::exists(output_path)) {
                 fs::remove_all(output_path);
             }
-            save_table({"__team_6__query_result__", output_path.string()});
+            save_table({"__team_6__query_result__", output_path});
         }
     } catch (std::exception& e) {
         std::cerr << "Query failed: " + std::string(e.what()) << std::endl;
