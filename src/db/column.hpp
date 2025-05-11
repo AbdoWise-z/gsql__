@@ -34,7 +34,6 @@ public:
     std::vector<size_t>              sorted;
     std::vector<std::vector<size_t>> hashed;
     size_t hashExSize;
-
     size_t nullsCount;
 
     void buildSortedIndexes ();
@@ -51,10 +50,8 @@ public:
     };
 
     [[nodiscard]] std::vector<size_t> sortSearch(tval, SortedSearchType) const;
-
     [[nodiscard]] bool isSortIndexed() const;
     [[nodiscard]] bool isHashIndexed() const;
-
     [[nodiscard]] column* copy() const;
     ~column();
 };

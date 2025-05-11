@@ -158,4 +158,5 @@ column::~column() {
     }
 
     GFI::clearCache(this); // clear any column cache in the gpu
+    GFI::clearCache(&this->nulls);
 }

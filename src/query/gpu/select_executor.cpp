@@ -370,6 +370,7 @@ std::pair<std::set<std::string>, table*> SelectExecutor::GPU::Execute(hsql::SQLS
             for (size_t rowIdx = 0; rowIdx < result.result->size();rowIdx++) {
                 for (size_t colIdx = 0; colIdx < result.result->columns.size();colIdx++) {
                     GFI::clearCache(injectedTable->columns[colIdx]);
+                    GFI::clearCache(&injectedTable->columns[colIdx]->nulls);
                     injectedTable->columns[colIdx]->nulls[0] = result.result->columns[colIdx]->nulls[rowIdx];
                     injectedTable->columns[colIdx]->data[0]  = result.result->columns[colIdx]->data[rowIdx];
                 }
